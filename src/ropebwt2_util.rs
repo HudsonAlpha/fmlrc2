@@ -4,7 +4,7 @@ extern crate subprocess;
 use std::io::Read;
 use subprocess::{Exec, Redirection};
 
-/// Wrapper script for using ropebwt2 with collection of strings.
+/// Wrapper function for using ropebwt2 with collection of strings.
 /// This is primarily for performing easy tests within the Rust environment.
 /// For production, we recommend running the `ropebwt2` command separately.
 /// # Arguments
@@ -26,11 +26,18 @@ pub fn create_bwt_from_strings(data: &Vec<&str>) -> Result<String, Box<dyn std::
     Ok(out)
 }
 
+/// Wrapper function for using ropebwt2 with a collection of gzipped FASTQ files.
+/// Returns a streamable result from the ropebwt2 command.
+/// # Argument
+/// * `fastqs` - a vector of fastq filenames
 pub fn stream_bwt_from_fastqs(fastqs: &Vec<&str>) -> Result<Box<dyn Read>, Box<dyn std::error::Error>> {
-    let join_filenames = fastqs.join("\n");
+    let join_filenames = fastqs.join(" ");
+    let mut initial_command = Exec::cmd("gunzip").arg("-c");
+    for fq in fastqs {
+        initial_command = initial_command.arg(fq);
+    }
     let out = (
-        Exec::cmd("gunzip").arg("-c").arg(join_filenames) |
-        //Exec::cmd("cat").arg(join_filenames) |
+        initial_command |
         Exec::cmd("awk").arg("NR % 4 == 2") |
         Exec::cmd("sort") |
         Exec::cmd("tr").arg("NT").arg("TN") |
@@ -65,25 +72,31 @@ mod tests {
         assert_eq!(create_bwt_from_strings(&data).unwrap(), "GTN$$ACCC$G\n".to_string());
     }
 
-    #[test]
-    fn test_from_fastqs() {
-        //create a temporary file and get the filename out
-        let data: Vec<&str> = vec!["CCGT", "ACG", "N"];
-        let mut file: NamedTempFile = Builder::new().suffix(".fq.gz").tempfile().unwrap();
-        let filename: String = file.path().to_str().unwrap().to_string();
-        
-        //this stores the list of filenames
-        let fastq_filenames: Vec<&str> = vec![&filename[..]];
-        
-        //now fill in the fake data using a gzip writer
+    fn write_strings_to_fqgz(data: Vec<&str>) -> NamedTempFile {
+        let mut file: NamedTempFile = Builder::new().prefix("temp_data_").suffix(".fq.gz").tempfile().unwrap();
         let mut gz = GzBuilder::new().write(file, Compression::default());
         let mut i: usize = 0;
         for s in data {
             writeln!(gz, "@seq_{}\n{}\n{}\n{}", i, s, "+", "F".repeat(s.len())).unwrap();
             i += 1;
         }
+
         //have to keep the file handle or everything blows up
-        let file = gz.finish().unwrap();
+        gz.finish().unwrap()
+    }
+
+    #[test]
+    fn test_from_fastqs() {
+        //create a temporary file and get the filename out
+        let data: Vec<&str> = vec!["CCGT", "N"];
+        let file = write_strings_to_fqgz(data);
+        let data2: Vec<&str> = vec!["ACG"];
+        let file2 = write_strings_to_fqgz(data2);
+
+        let fastq_filenames: Vec<&str> = vec![
+            &file.path().to_str().unwrap(),
+            &file2.path().to_str().unwrap()
+        ];
         
         //now read the string in and verify correctness
         let mut bwt_stream = stream_bwt_from_fastqs(&fastq_filenames).unwrap();
