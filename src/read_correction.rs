@@ -17,6 +17,7 @@ pub struct CorrectionParameters {
     max_branch_attempt_length: usize,
     branch_limit_factor: u64,
     branch_buffer_factor: f64,
+    //TODO: add a tail_truncate_factor that buts a bounding box around min length and max length
     tail_buffer_factor: f64,
     frac: f64,
     fm_bit_power: u8,
@@ -31,6 +32,7 @@ pub struct Correction {
 }
 
 /// a struct for storing generic read
+#[derive(Clone)]
 pub struct LongReadFA {
     label: String,
     seq: String
@@ -78,13 +80,13 @@ pub fn correction_job(arc_bwt: Arc<BitVectorBWT>, long_read: LongReadFA, arc_par
         avg_after = 0.0;
     }
 
-    //TODO make this do something
+    //send it on back y'all
     CorrectionResults {
         label: long_read.label,
         original_seq: long_read.seq,
         corrected_seq: corrected_seq,
-        avg_before: 0.0,
-        avg_after: 0.0
+        avg_before: avg_before,
+        avg_after: avg_after
     }
 }
 
@@ -900,7 +902,37 @@ mod tests {
 
     #[test]
     fn test_correction_job() {
-        //we need to test a full correction job here, including the counts where possible
-        assert_eq!(0, 1);
+        //shared bwt
+        let bwt: BitVectorBWT = get_constant_bwt();
+        let arc_bwt: Arc<BitVectorBWT> = Arc::new(bwt);
+
+        //shared params
+        let params = CorrectionParameters {
+            use_fm_index: true,
+            kmer_sizes: vec![9],
+            min_count: 5,
+            max_branch_attempt_length: 10000,
+            branch_limit_factor: 4,
+            branch_buffer_factor: 1.3,
+            tail_buffer_factor: 1.00, //normally - 1.05,
+            frac: 0.1,
+            fm_bit_power: 8,
+            verbose: true
+        };
+        let arc_params: Arc<CorrectionParameters> = Arc::new(params);
+
+        //the two strings in the bwt
+        let const_string: String =  "AACGGATCAAGCTTACCAGTATTTACGT".to_string();
+        
+        let long_read_const_mod: LongReadFA = LongReadFA {
+            label: "test".to_string(),
+            seq: "TACGGATCAAGCATACCAGTATGTACGT".to_string()
+        };
+        let corr_results = correction_job(arc_bwt, long_read_const_mod.clone(), arc_params);
+        assert_eq!(corr_results.label, long_read_const_mod.label);
+        assert_eq!(corr_results.original_seq, long_read_const_mod.seq);
+        assert_eq!(corr_results.corrected_seq, const_string);
+        assert_eq!(corr_results.avg_before, 6.0);
+        assert_eq!(corr_results.avg_after, 30.0);
     }
 }
