@@ -2,6 +2,9 @@
 extern crate log;
 
 use log::{info, error};
+use std::io::prelude::*;
+use std::fs;
+
 use crate::bwt_converter::*;
 use crate::indexed_bit_vec::IndexedBitVec;
 use crate::string_util;
@@ -67,6 +70,61 @@ impl BitVectorBWT {
         self.bwt = bwt;
         info!("Loading BWT from vector of length {}", self.bwt.len());
         
+        //we copied it in, standard init now
+        self.standard_init();
+    }
+
+    /// Initializes the BWT from the numpy file format for compressed BWTs
+    /// # Arguments
+    /// * `filename` - the name of the file to load into memory
+    // TODO: figure out how to write a test for this
+    pub fn load_numpy_file(&mut self, filename: &String) -> std::io::Result<()> {
+        //read the numpy header: http://docs.scipy.org/doc/numpy-1.10.1/neps/npy-format.html
+        let mut header: Vec<u8>;
+        
+        //get the initial file size
+        let file_metadata: fs::Metadata = fs::metadata(&filename)?;
+        let full_file_size: u64 = file_metadata.len();
+
+        //read the initial fixed header
+        let mut file = fs::File::open(&filename)?;
+        let mut init_header: Vec<u8> = vec![0; 16];
+        let read_count: usize = file.read(&mut init_header[..])?;
+        if read_count != 16 {
+            panic!("Could not read initial 16 bytes of header for file {:?}", filename);
+        }
+
+        //read the dynamic header
+        let header_len: usize = init_header[8] as usize + 256 * init_header[9] as usize;
+        let mut skip_bytes: usize = 10+header_len;
+        if skip_bytes % 16 != 0 {
+            skip_bytes = ((skip_bytes / 16)+1)*16;
+        }
+        let mut skip_header: Vec<u8> = vec![0; skip_bytes-16];
+        let read_count: usize = file.read(&mut skip_header[..])?;
+        if read_count != skip_bytes-16 {
+            panic!("Could not read bytes 16-{:?} of header for file {:?}", skip_bytes, filename);
+        }
+
+        //finally read in everything else
+        let bwt_disk_size: u64 = full_file_size - skip_bytes as u64;
+        self.bwt = vec![0; bwt_disk_size as usize];
+        let read_count: usize = file.read(&mut self.bwt[..])?;
+        if read_count as u64 != bwt_disk_size {
+            panic!("Could not read {:?} bytes of BWT body for file {:?}", bwt_disk_size, filename);
+        }
+        //TODO: I imagine we want to use the info here somehow?
+        //printf("loaded bwt with %lu compressed values\n", this->bwt.size());
+
+        info!("Loading BWT with {:?} compressed values", bwt_disk_size);
+
+        //we loaded the file into memory, standard init now
+        self.standard_init();
+
+        Ok(())
+    }
+
+    fn standard_init(&mut self) {
         //first pass does a count so we can pre-allocate the indices correctly
         self.calculate_totals();
 
@@ -360,5 +418,20 @@ mod tests {
 
         let pu = bwt.count_pileup(&vec![1, 2, 3, 5], 3); //this string is it's own rev-comp, so we get two counts on the 3-mers
         assert_eq!(pu, vec![2, 2]);
+    }
+
+    #[test]
+    fn test_load_from_file() {
+        //TODO: replace this will a file builder
+        //strings - "CCGT\nACG\nN"
+        let filename: String = "/Users/matt/Downloads/test_bwt.npy".to_string();
+        let mut bwt = BitVectorBWT::new();
+        bwt.load_numpy_file(&filename);
+
+        let expected_totals = vec![3, 1, 3, 2, 1, 1];
+        for i in {0..6} {
+            //make sure the total counts are correct
+            assert_eq!(bwt.get_total_counts(i as u8), expected_totals[i]);
+        }
     }
 }
