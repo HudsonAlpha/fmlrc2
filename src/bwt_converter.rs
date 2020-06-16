@@ -11,6 +11,17 @@ pub const NUM_POWER: usize = 32;  //2**numberBits
 pub const MASK: u8 = 0x07;        //255 >> numberBits
 pub const COUNT_MASK: u8 = 0x1F;
 
+/// this function will convert a stream of characters into the compressed vector representation
+/// # Arguments
+/// * `bwt` - the stream of characters to be compressed, allowed characters are "$ACGNT"; newline characters ('\n') are ignored
+/// # Examples
+/// ```rust
+/// use fmlrc::bwt_converter::convert_to_vec;
+/// use std::io::Cursor;
+/// let seq = Cursor::new("ACGNT$");
+/// let vec = convert_to_vec(seq);
+/// assert_eq!(vec.len(), 6);
+/// ```
 pub fn convert_to_vec(bwt: impl Read) -> Vec<u8> {
     let mut translate: [u8; 256] = [255; 256];
     let valid_symbols = "$ACGNT";
