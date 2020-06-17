@@ -115,7 +115,6 @@ impl BitVectorBWT {
         }
         //TODO: I imagine we want to use the info here somehow?
         //printf("loaded bwt with %lu compressed values\n", this->bwt.size());
-
         info!("Loading BWT with {:?} compressed values", bwt_disk_size);
 
         //we loaded the file into memory, standard init now
@@ -350,7 +349,10 @@ impl BitVectorBWT {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ropebwt2_util::stream_bwt_from_fastqs;
+    use flate2::{Compression, GzBuilder};
     use std::io::Cursor;
+    use tempfile::{Builder, NamedTempFile};
 
     #[test]
     fn test_simple_index() {
@@ -420,11 +422,39 @@ mod tests {
         assert_eq!(pu, vec![2, 2]);
     }
 
+    fn write_strings_to_fqgz(data: Vec<&str>) -> NamedTempFile {
+        let mut file: NamedTempFile = Builder::new().prefix("temp_data_").suffix(".fq.gz").tempfile().unwrap();
+        let mut gz = GzBuilder::new().write(file, Compression::default());
+        let mut i: usize = 0;
+        for s in data {
+            writeln!(gz, "@seq_{}\n{}\n{}\n{}", i, s, "+", "F".repeat(s.len())).unwrap();
+            i += 1;
+        }
+
+        //have to keep the file handle or everything blows up
+        gz.finish().unwrap()
+    }
+
     #[test]
     fn test_load_from_file() {
-        //TODO: replace this will a file builder
         //strings - "CCGT\nACG\nN"
-        let filename: String = "/Users/matt/Downloads/test_bwt.npy".to_string();
+        //build the BWT
+        let data: Vec<&str> = vec!["CCGT", "N", "ACG"];
+        let file = write_strings_to_fqgz(data);
+        let fastq_filenames: Vec<&str> = vec![
+            &file.path().to_str().unwrap(),
+        ];
+
+        //stream and compress the BWT
+        let mut bwt_stream = stream_bwt_from_fastqs(&fastq_filenames).unwrap();
+        let compressed_bwt = convert_to_vec(bwt_stream);
+        
+        //save the output to a temporary numpy file
+        let mut bwt_file: NamedTempFile = Builder::new().prefix("temp_data_").suffix(".npy").tempfile().unwrap();
+        let filename: String = bwt_file.path().to_str().unwrap().to_string();
+        let result = save_bwt_numpy(&compressed_bwt[..], &filename);
+        
+        //load it back in and verify counts
         let mut bwt = BitVectorBWT::new();
         bwt.load_numpy_file(&filename);
 

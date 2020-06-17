@@ -1,6 +1,8 @@
 
 extern crate subprocess;
+extern crate log;
 
+use log::{info, error};
 use std::io::Read;
 use subprocess::{Exec, Redirection};
 
@@ -16,13 +18,16 @@ use subprocess::{Exec, Redirection};
 /// assert_eq!(create_bwt_from_strings(&data).unwrap(), "GT$$ACCCG\n".to_string());
 /// ```
 pub fn create_bwt_from_strings(data: &Vec<&str>) -> Result<String, Box<dyn std::error::Error>> {
+    info!("Concatenating string vector...");
     let join_data = data.join("\n");
+    info!("Running BWT construction pipeline from strings...");
     let out = (
         Exec::cmd("sort") |
         Exec::cmd("tr").arg("NT").arg("TN") |
         Exec::cmd("ropebwt2").arg("-LR") |
         Exec::cmd("tr").arg("NT").arg("TN")
     ).stdin(join_data.as_str()).stdout(Redirection::Pipe).capture()?.stdout_str();
+    info!("BWT construction from strings complete.");
     Ok(out)
 }
 
@@ -32,6 +37,7 @@ pub fn create_bwt_from_strings(data: &Vec<&str>) -> Result<String, Box<dyn std::
 /// * `fastqs` - a vector of fastq filenames
 pub fn stream_bwt_from_fastqs(fastqs: &Vec<&str>) -> Result<Box<dyn Read>, Box<dyn std::error::Error>> {
     let join_filenames = fastqs.join(" ");
+    info!("Streaming BWT construction pipeline from gzipped FASTQ files:\n{:?}", fastqs);
     let mut initial_command = Exec::cmd("gunzip").arg("-c");
     for fq in fastqs {
         initial_command = initial_command.arg(fq);
