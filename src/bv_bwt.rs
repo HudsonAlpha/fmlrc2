@@ -1,7 +1,7 @@
 
 extern crate log;
 
-use log::{info, error};
+use log::info;
 use std::io::prelude::*;
 use std::fs;
 
@@ -80,8 +80,6 @@ impl BitVectorBWT {
     // TODO: figure out how to write a test for this
     pub fn load_numpy_file(&mut self, filename: &String) -> std::io::Result<()> {
         //read the numpy header: http://docs.scipy.org/doc/numpy-1.10.1/neps/npy-format.html
-        let mut header: Vec<u8>;
-        
         //get the initial file size
         let file_metadata: fs::Metadata = fs::metadata(&filename)?;
         let full_file_size: u64 = file_metadata.len();
@@ -423,7 +421,7 @@ mod tests {
     }
 
     fn write_strings_to_fqgz(data: Vec<&str>) -> NamedTempFile {
-        let mut file: NamedTempFile = Builder::new().prefix("temp_data_").suffix(".fq.gz").tempfile().unwrap();
+        let file: NamedTempFile = Builder::new().prefix("temp_data_").suffix(".fq.gz").tempfile().unwrap();
         let mut gz = GzBuilder::new().write(file, Compression::default());
         let mut i: usize = 0;
         for s in data {
@@ -446,17 +444,17 @@ mod tests {
         ];
 
         //stream and compress the BWT
-        let mut bwt_stream = stream_bwt_from_fastqs(&fastq_filenames).unwrap();
+        let bwt_stream = stream_bwt_from_fastqs(&fastq_filenames).unwrap();
         let compressed_bwt = convert_to_vec(bwt_stream);
         
         //save the output to a temporary numpy file
-        let mut bwt_file: NamedTempFile = Builder::new().prefix("temp_data_").suffix(".npy").tempfile().unwrap();
+        let bwt_file: NamedTempFile = Builder::new().prefix("temp_data_").suffix(".npy").tempfile().unwrap();
         let filename: String = bwt_file.path().to_str().unwrap().to_string();
-        let result = save_bwt_numpy(&compressed_bwt[..], &filename);
+        save_bwt_numpy(&compressed_bwt[..], &filename).unwrap();
         
         //load it back in and verify counts
         let mut bwt = BitVectorBWT::new();
-        bwt.load_numpy_file(&filename);
+        bwt.load_numpy_file(&filename).unwrap();
 
         let expected_totals = vec![3, 1, 3, 2, 1, 1];
         for i in {0..6} {

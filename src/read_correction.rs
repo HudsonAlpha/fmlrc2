@@ -11,7 +11,7 @@ const VALID_CHARS_LEN: usize = VALID_CHARS.len();
 
 /// stores options for running the correction algorithms
 pub struct CorrectionParameters {
-    use_fm_index: bool,
+    //use_fm_index: bool, //old parameter that toggled between bit vector and classic mode
     kmer_sizes: Vec<usize>,
     min_count: u64,
     max_branch_attempt_length: usize,
@@ -20,7 +20,7 @@ pub struct CorrectionParameters {
     //TODO: add a tail_truncate_factor that buts a bounding box around min length and max length
     tail_buffer_factor: f64,
     frac: f64,
-    fm_bit_power: u8,
+    //fm_bit_power: u8, //only matters for classic mode which isn't implemented currently
     verbose: bool
 }
 
@@ -63,8 +63,8 @@ pub fn correction_job(arc_bwt: Arc<BitVectorBWT>, long_read: LongReadFA, arc_par
     //convert back to a string
     let corrected_seq: String = string_util::convert_itos(&seq_i);
 
-    let mut avg_before: f64;
-    let mut avg_after: f64;
+    let avg_before: f64;
+    let avg_after: f64;
     if params.verbose {
         //TODO: is there a way to pre-serve this from earlier? this mode will always take longer, so it's not a huge deal
         let orig_seq: Vec<u8> = string_util::convert_stoi(&long_read.seq);
@@ -444,7 +444,7 @@ pub fn bridge_kmers(
     assert_eq!(kmer_len, target_kmer.len());
     let mut counts: [u64; VALID_CHARS_LEN] = [0; VALID_CHARS_LEN];
     let mut num_branched: usize = 0;
-    let mut max_pos: usize = 0;
+    let mut max_pos: usize;
 
     //the queries will populates these vectors
     let mut curr_kmer: Vec<u8> = vec![4; kmer_len];
@@ -546,7 +546,7 @@ pub fn assemble_from_kmer(
     let kmer_len = seed_kmer.len();
     let mut counts: [u64; VALID_CHARS_LEN] = [0; VALID_CHARS_LEN];
     let mut num_branched: usize = 0;
-    let mut max_pos: usize = 0;
+    let mut max_pos: usize;
 
     //the queries will populates these vectors
     let mut curr_kmer: Vec<u8> = vec![4; kmer_len];
@@ -790,7 +790,6 @@ mod tests {
         
         //now lets alter a sequence and test it
         let params = CorrectionParameters {
-            use_fm_index: true,
             kmer_sizes: vec![9],
             min_count: 5,
             max_branch_attempt_length: 10000,
@@ -798,7 +797,6 @@ mod tests {
             branch_buffer_factor: 1.3,
             tail_buffer_factor: 1.00, //normally - 1.05,
             frac: 0.1,
-            fm_bit_power: 8,
             verbose: true
         };
 
@@ -817,7 +815,7 @@ mod tests {
         let corrected = correction_pass(&bwt, &change_mid_seq, &params, 9);
         assert_eq!(corrected, query);
         
-        //TODO: single tail <EVENT>
+        //single tail <EVENT>
         let change_tail_seq = convert_stoi(&"AACGGATCAAGCTTACCAGTATTTGCGT");
         let corrected = correction_pass(&bwt, &change_tail_seq, &params, 9);
         assert_eq!(corrected, query);
@@ -837,7 +835,6 @@ mod tests {
 
         //now lets alter a sequence and test it
         let params = CorrectionParameters {
-            use_fm_index: true,
             kmer_sizes: vec![9],
             min_count: 5,
             max_branch_attempt_length: 10000,
@@ -845,7 +842,6 @@ mod tests {
             branch_buffer_factor: 1.3,
             tail_buffer_factor: 1.00, //normally - 1.05,
             frac: 0.1,
-            fm_bit_power: 8,
             verbose: true
         };
         
@@ -908,7 +904,6 @@ mod tests {
 
         //shared params
         let params = CorrectionParameters {
-            use_fm_index: true,
             kmer_sizes: vec![9],
             min_count: 5,
             max_branch_attempt_length: 10000,
@@ -916,7 +911,6 @@ mod tests {
             branch_buffer_factor: 1.3,
             tail_buffer_factor: 1.00, //normally - 1.05,
             frac: 0.1,
-            fm_bit_power: 8,
             verbose: true
         };
         let arc_params: Arc<CorrectionParameters> = Arc::new(params);

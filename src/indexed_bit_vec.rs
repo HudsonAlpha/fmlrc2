@@ -5,7 +5,6 @@ use math::round;
 /// Represents a bit vector with an very fast index on top of it.
 /// For a vector of length N, the index takes up O(N) bits.
 pub struct IndexedBitVec {
-    size: usize,
     index_size: usize,
     bitvec: BitVec::<Lsb0, u64>,
     index: Vec<u64>
@@ -25,7 +24,6 @@ impl IndexedBitVec {
         let index_size: usize = (round::ceil((size as f64) / 64.0, 0) as usize)+1;
         let bitvec = bitvec![Lsb0, u64; 0; size];
 		Self {
-            size: size,
             index_size: index_size,
             bitvec: bitvec,
             index: vec![0; index_size]

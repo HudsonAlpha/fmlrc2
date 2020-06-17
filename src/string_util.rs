@@ -1,8 +1,4 @@
 
-extern crate log;
-
-use log::{info, error};
-
 /// contains ASCII to integer encoding
 static STRING_TO_INT: [u8; 256] = build_stoi();
 

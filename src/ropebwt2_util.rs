@@ -2,7 +2,7 @@
 extern crate subprocess;
 extern crate log;
 
-use log::{info, error};
+use log::info;
 use std::io::Read;
 use subprocess::{Exec, Redirection};
 
@@ -36,7 +36,6 @@ pub fn create_bwt_from_strings(data: &Vec<&str>) -> Result<String, Box<dyn std::
 /// # Argument
 /// * `fastqs` - a vector of fastq filenames
 pub fn stream_bwt_from_fastqs(fastqs: &Vec<&str>) -> Result<Box<dyn Read>, Box<dyn std::error::Error>> {
-    let join_filenames = fastqs.join(" ");
     info!("Streaming BWT construction pipeline from gzipped FASTQ files:\n{:?}", fastqs);
     let mut initial_command = Exec::cmd("gunzip").arg("-c");
     for fq in fastqs {
@@ -68,8 +67,7 @@ TODO: seems like we need a function that will take a list of compressed FASTQ fi
 mod tests {
     use super::*;
     use flate2::{Compression, GzBuilder};
-    use std::fs::File;
-    use std::io::{self, Write};
+    use std::io::Write;
     use tempfile::{Builder, NamedTempFile};
     
     #[test]
@@ -79,7 +77,7 @@ mod tests {
     }
 
     fn write_strings_to_fqgz(data: Vec<&str>) -> NamedTempFile {
-        let mut file: NamedTempFile = Builder::new().prefix("temp_data_").suffix(".fq.gz").tempfile().unwrap();
+        let file: NamedTempFile = Builder::new().prefix("temp_data_").suffix(".fq.gz").tempfile().unwrap();
         let mut gz = GzBuilder::new().write(file, Compression::default());
         let mut i: usize = 0;
         for s in data {

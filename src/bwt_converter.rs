@@ -1,7 +1,7 @@
 
 extern crate log;
 
-use log::{info, error};
+use log::info;
 use std::fs::{File, OpenOptions};
 use std::io::prelude::*;
 use std::io::{BufWriter, Read};
@@ -92,11 +92,11 @@ pub fn convert_to_vec(bwt: impl Read) -> Vec<u8> {
 pub fn save_bwt_numpy(bwt: impl Read, filename: &String) -> Result<(), Box<dyn std::error::Error>> {
     let npy_file: File = File::create(filename)?;
     let mut buffer = BufWriter::new(npy_file);
-    buffer.write(&[32; 95]);
-    buffer.write(&[10; 1]);
+    buffer.write(&[32; 95])?;
+    buffer.write(&[10; 1])?;
     let mut num_bytes: u64 = 0;
     for c in bwt.bytes() {
-        buffer.write(&[c?]);
+        buffer.write(&[c?])?;
         num_bytes += 1;
     }
     buffer.flush()?;
@@ -200,12 +200,11 @@ mod tests {
         let seq = Cursor::new(seq);
         let vec = convert_to_vec(seq);
 
-        let mut file: NamedTempFile = Builder::new().prefix("temp_data_").suffix(".npy").tempfile().unwrap();
+        let file: NamedTempFile = Builder::new().prefix("temp_data_").suffix(".npy").tempfile().unwrap();
         let filename: String = file.path().to_str().unwrap().to_string();
         
-        let result = save_bwt_numpy(&vec[..], &filename);
+        save_bwt_numpy(&vec[..], &filename).unwrap();
         let read_file = File::open(&filename).unwrap();
-        let mut i: usize = 0;
         let mut read_result: Vec<u8> = Vec::<u8>::new();
         for c in read_file.bytes() {
             read_result.push(c.unwrap());
