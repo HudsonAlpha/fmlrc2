@@ -13,6 +13,10 @@ pub const NUM_POWER: usize = 32;  //2**numberBits
 pub const MASK: u8 = 0x07;        //255 >> numberBits
 pub const COUNT_MASK: u8 = 0x1F;
 
+//TODO: convert_to_vec currently pulls the whole compressed BWT into memory, which I'm largely okay with
+// if we ever decide to change it, we could try to build an iterator following this guide: 
+// https://burgers.io/wrapped-iterators-in-rust; seems like a bit of a pain though
+
 /// this function will convert a stream of characters into the compressed vector representation
 /// # Arguments
 /// * `bwt` - the stream of characters to be compressed, allowed characters are "$ACGNT"; newline characters ('\n') are ignored
