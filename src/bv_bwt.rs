@@ -127,6 +127,8 @@ impl BitVectorBWT {
 
         //now we can construct the FM-index pieces in the binary storage format for rapid speed
         self.construct_fmindex(false);
+
+        info!("Finished BWT initialization.");
     }
 
     /// This calculates the total number of each symbol in the BWT from the compressed representation.
@@ -171,6 +173,7 @@ impl BitVectorBWT {
     /// * `store_dollar` - if True, the index for the sentinel will also be constructed
     fn construct_fmindex(&mut self, store_dollar: bool) {
         //setup vectors
+        info!("Allocating binary vectors...");
         self.binary_bwt = Vec::<IndexedBitVec>::with_capacity(VC_LEN);
         for x in {0..VC_LEN} {
             if x != 0 || store_dollar {
@@ -189,6 +192,7 @@ impl BitVectorBWT {
         let mut current_char: u8;
 
         //now we loop through the compressed BWT
+        info!("Calculating binary vectors...");
         let num_bytes: usize = self.bwt.len();
         for x in {0..num_bytes} {
             current_char = self.bwt[x] & MASK;
@@ -201,9 +205,7 @@ impl BitVectorBWT {
                 //first save the current FM-index entry
                 if prev_char != 0 || store_dollar {
                     for y in {bwt_index..bwt_index+total_char_count} {
-                        unsafe {
-                            self.binary_bwt[prev_char as usize].set_bit(y as usize);
-                        }
+                        self.binary_bwt[prev_char as usize].set_bit(y as usize);
                     }
                 }
                 
@@ -218,13 +220,12 @@ impl BitVectorBWT {
         //do the last block of characters
         if prev_char != 0 || store_dollar {
             for y in {bwt_index..bwt_index+total_char_count} {
-                unsafe {
-                    self.binary_bwt[prev_char as usize].set_bit(y as usize);
-                }
+                self.binary_bwt[prev_char as usize].set_bit(y as usize);
             }
         }
         
         //build the indices for each vector
+        info!("Constructing FM-indices...");
         for x in {0..VC_LEN} {
             if x != 0 || store_dollar {
                 self.binary_bwt[x].build_index(self.start_index[x]);

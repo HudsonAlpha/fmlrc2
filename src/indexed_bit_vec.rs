@@ -36,7 +36,7 @@ impl IndexedBitVec {
     /// ```rust
     /// # use fmlrc::indexed_bit_vec::IndexedBitVec;
     /// # let mut ibv = IndexedBitVec::with_capacity(128);
-    /// unsafe{ ibv.set_bit(64) };
+    /// ibv.set_bit(64);
     /// ```
     #[inline]
     pub fn set_bit(&mut self, pos: usize) {
@@ -56,7 +56,7 @@ impl IndexedBitVec {
     /// ```rust
     /// # use fmlrc::indexed_bit_vec::IndexedBitVec;
     /// # let mut ibv = IndexedBitVec::with_capacity(128);
-    /// # unsafe{ ibv.set_bit(64) };
+    /// # ibv.set_bit(64);
     /// let initial_rank=0;
     /// ibv.build_index(initial_rank);
     /// ```
@@ -77,7 +77,7 @@ impl IndexedBitVec {
     /// ```rust
     /// # use fmlrc::indexed_bit_vec::IndexedBitVec;
     /// # let mut ibv = IndexedBitVec::with_capacity(128);
-    /// # unsafe{ ibv.set_bit(64) };
+    /// # ibv.set_bit(64);
     /// # let initial_rank=0;
     /// # ibv.build_index(initial_rank);
     /// assert_eq!(ibv.rank(64), initial_rank);
@@ -109,9 +109,9 @@ mod tests {
         //array with 128 "1"s, then 128 "0"s, then 1 "1"
         let mut ibv = IndexedBitVec::with_capacity(257);
         for i in {0..128} {
-            unsafe {ibv.set_bit(i);}
+            ibv.set_bit(i);
         }
-        unsafe {ibv.set_bit(256);}
+        ibv.set_bit(256);
 
         //check the sets
         for i in {0..128} {
@@ -139,9 +139,9 @@ mod tests {
         //array with 128 "1"s, then 128 "0"s, then 1 "1"
         let mut ibv = IndexedBitVec::with_capacity(257);
         for i in {0..128} {
-            unsafe {ibv.set_bit(i);}
+            ibv.set_bit(i);
         }
-        unsafe {ibv.set_bit(256);}
+        ibv.set_bit(256);
 
         ibv.build_index(0);
         let slice: &[u64] = ibv.index.as_slice();
@@ -154,7 +154,7 @@ mod tests {
         //progressively adding bits
         let mut ibv = IndexedBitVec::with_capacity(64);
         for i in {0..64} {
-            unsafe {ibv.set_bit(i);}
+            ibv.set_bit(i);
             ibv.build_index(0);
             let slice: &[u64] = ibv.index.as_slice();
             assert_eq!(slice[1], (i+1) as u64);
@@ -166,7 +166,7 @@ mod tests {
         //progressively adding bits
         let mut ibv = IndexedBitVec::with_capacity(64);
         for i in {0..64} {
-            unsafe {ibv.set_bit(i);}
+            ibv.set_bit(i);
         }
         ibv.build_index(100);
         let slice: &[u64] = ibv.index.as_slice();
@@ -178,9 +178,9 @@ mod tests {
         //array with 128 "1"s, then 128 "0"s, then 1 "1"
         let mut ibv = IndexedBitVec::with_capacity(257);
         for i in {0..128} {
-            unsafe {ibv.set_bit(i);}
+            ibv.set_bit(i);
         }
-        unsafe {ibv.set_bit(256);}
+        ibv.set_bit(256);
         ibv.build_index(0);
 
         for i in {0..128} {
