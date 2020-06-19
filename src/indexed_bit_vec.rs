@@ -1,12 +1,11 @@
 
-use bitvec::prelude::*;
 use math::round;
 
 /// Represents a bit vector with an very fast index on top of it.
 /// For a vector of length N, the index takes up O(N) bits.
 pub struct IndexedBitVec {
     index_size: usize,
-    bitvec: BitVec::<Lsb0, u64>,
+    bitvec: Vec<u64>,
     index: Vec<u64>
 }
 
@@ -22,7 +21,7 @@ impl IndexedBitVec {
     #[inline]
 	pub fn with_capacity(size: usize) -> Self {
         let index_size: usize = (round::ceil((size as f64) / 64.0, 0) as usize)+1;
-        let bitvec = bitvec![Lsb0, u64; 0; size];
+        let bitvec = vec![0; index_size];
 		Self {
             index_size: index_size,
             bitvec: bitvec,
@@ -40,9 +39,14 @@ impl IndexedBitVec {
     /// unsafe{ ibv.set_bit(64) };
     /// ```
     #[inline]
-    pub unsafe fn set_bit(&mut self, pos: usize) {
-        //we're using the unsafe version, so this will blow up if used incorrectly
-        self.bitvec.set_unchecked(pos, true);
+    pub fn set_bit(&mut self, pos: usize) {
+        self.bitvec[pos >> 6] |= (0x1 << (pos & 0x3F));
+    }
+
+    /// Currently, this function is strictly for testing
+    #[inline]
+    fn get_bit(&mut self, pos: usize) -> bool {
+        ((self.bitvec[pos >> 6] >> (pos & 0x3F)) & 0x1) != 0
     }
 
     /// Builds an index for the array to perform rank queries.
@@ -81,7 +85,6 @@ impl IndexedBitVec {
     /// ```
     #[inline]
     pub fn rank(&self, pos: usize) -> u64{
-        //self.index[pos >> 6] + (self.bitvec.as_slice()[pos >> 6] << (!pos & 0x3F) << 1)
         self.index[pos >> 6] + ((self.bitvec.as_slice()[pos >> 6] << (!pos & 0x3f)) << 1).count_ones() as u64
     }
 }
@@ -112,16 +115,16 @@ mod tests {
 
         //check the sets
         for i in {0..128} {
-            assert_eq!(ibv.bitvec.get(i), Some(&true));
+            assert_eq!(ibv.get_bit(i), true);
         }
         for i in {128..25} {
-            assert_eq!(ibv.bitvec.get(i), Some(&false));
+            assert_eq!(ibv.get_bit(i), false);
         }
-        assert_eq!(ibv.bitvec.get(256), Some(&true));
+        assert_eq!(ibv.get_bit(256), true);
 
         //check that our slicing is correct also
         let slice: &[u64] = ibv.bitvec.as_slice();
-        assert_eq!(slice.len(), 5);
+        assert_eq!(slice.len(), 6);
         for i in {0..2} {
             assert_eq!(slice[i], 0xffffffffffffffff);
         }
