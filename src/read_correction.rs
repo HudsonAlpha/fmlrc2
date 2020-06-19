@@ -12,16 +12,16 @@ const VALID_CHARS_LEN: usize = VALID_CHARS.len();
 /// stores options for running the correction algorithms
 pub struct CorrectionParameters {
     //use_fm_index: bool, //old parameter that toggled between bit vector and classic mode
-    kmer_sizes: Vec<usize>,
-    min_count: u64,
-    max_branch_attempt_length: usize,
-    branch_limit_factor: u64,
-    branch_buffer_factor: f64,
+    pub kmer_sizes: Vec<usize>,
+    pub min_count: u64,
+    pub max_branch_attempt_length: usize,
+    pub branch_limit_factor: f64,
+    pub branch_buffer_factor: f64,
     //TODO: add a tail_truncate_factor that buts a bounding box around min length and max length
-    tail_buffer_factor: f64,
-    frac: f64,
+    pub tail_buffer_factor: f64,
+    pub frac: f64,
     //fm_bit_power: u8, //only matters for classic mode which isn't implemented currently
-    verbose: bool
+    pub verbose: bool
 }
 
 /// a basic struct for storing a correction to a sequence
@@ -793,7 +793,7 @@ mod tests {
             kmer_sizes: vec![9],
             min_count: 5,
             max_branch_attempt_length: 10000,
-            branch_limit_factor: 4,
+            branch_limit_factor: 4.0,
             branch_buffer_factor: 1.3,
             tail_buffer_factor: 1.00, //normally - 1.05,
             frac: 0.1,
@@ -838,7 +838,7 @@ mod tests {
             kmer_sizes: vec![9],
             min_count: 5,
             max_branch_attempt_length: 10000,
-            branch_limit_factor: 4,
+            branch_limit_factor: 4.0,
             branch_buffer_factor: 1.3,
             tail_buffer_factor: 1.00, //normally - 1.05,
             frac: 0.1,
@@ -907,7 +907,7 @@ mod tests {
             kmer_sizes: vec![9],
             min_count: 5,
             max_branch_attempt_length: 10000,
-            branch_limit_factor: 4,
+            branch_limit_factor: 4.0,
             branch_buffer_factor: 1.3,
             tail_buffer_factor: 1.00, //normally - 1.05,
             frac: 0.1,
