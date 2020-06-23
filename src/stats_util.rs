@@ -21,23 +21,21 @@
 pub fn calculate_bounded_median(in_array: &[u64], min_value: u64) -> u64 {
     let array_len: u64 = in_array.len() as u64;
     let mut allowed_values: Vec<u64> = Vec::<u64>::with_capacity(array_len as usize);
-    let mut count: u64 = 0;
-
+    
     //filter down to only the values that are usable
     for val in in_array {
         if *val >= min_value {
             allowed_values.push(*val);
-            count += 1;
         }
     }
-
-    if count > 0 {
-        //not a true median, but the lower of the two values when averaging would normally occur
-        allowed_values.sort();
-        return allowed_values[(count as usize - 1) / 2];
-    }
-    else {
-        return 0;
+    
+    return match allowed_values.len() {
+        0 => 0,
+        1 => allowed_values[0],
+        count => {
+            allowed_values.sort();
+            allowed_values[(count as usize - 1) / 2]
+        }
     }
 }
 
