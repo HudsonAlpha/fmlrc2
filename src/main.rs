@@ -3,17 +3,24 @@ extern crate argparse;
 extern crate env_logger;
 extern crate exitcode;
 extern crate log;
+extern crate needletail;
 
 use log::{info, error};
+use needletail::parse_sequence_path;
 use std::fs::{File, OpenOptions};
 use std::path::Path;
+use std::sync::{Arc, mpsc};
+use threadpool::ThreadPool;
+
+use fmlrc::read_correction::{CorrectionParameters, CorrectionResults, LongReadFA, correction_job};
+use fmlrc::bv_bwt::BitVectorBWT;
 
 fn main() {
     //initialize logging for our benefit later
     env_logger::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
     //non-cli parameters
-    const JOB_SLOTS: usize = 10000;
+    const JOB_SLOTS: u64 = 10000;
 
     //this is the CLI block, params that get populated appear before
     let mut bwt_fn: String = String::new();
@@ -99,5 +106,81 @@ fn main() {
         std::process::exit(exitcode::DATAERR);
     }
     
-    //fmlrc::test();
+    //TODO make some of these hard-coded into params?
+    let my_params: CorrectionParameters = CorrectionParameters {
+        kmer_sizes: kmer_sizes,
+        min_count: min_count,
+        max_branch_attempt_length: 10000,
+        branch_limit_factor: branch_factor,
+        branch_buffer_factor: 1.3,
+        tail_buffer_factor: 1.05,
+        frac: min_frac,
+        verbose: verbose_mode
+    };
+    let arc_params: Arc<CorrectionParameters> = Arc::new(my_params);
+
+    //first load the BWT into memory
+    let mut bwt: BitVectorBWT = BitVectorBWT::new();
+    match bwt.load_numpy_file(&bwt_fn) {
+        Ok(_) => {},
+        Err(e) => {
+            error!("Failed to load BWT file: {:?}", e);
+            std::process::exit(exitcode::IOERR);
+        }
+    };
+    let arc_bwt: Arc<BitVectorBWT> = Arc::new(bwt);
+
+    //we need to set up the multiprocessing components now
+    let pool = ThreadPool::new(threads);
+    let (tx, rx) = mpsc::channel();
+
+    //now needletail open the reads to correct
+    let mut read_index: u64 = 0;
+    let mut jobs_queued: u64 = 0;
+    let mut results_received: u64 = 0;
+    let parsing_result = parse_sequence_path(
+        long_read_fn,
+        |_| {},
+        |record| {
+            if read_index >= begin_id && read_index < end_id {
+                //if we've filled our queue, then we should wait until we get some results back
+                if jobs_queued - results_received >= JOB_SLOTS {
+                    let rx_value: CorrectionResults = rx.recv().unwrap();
+                    println!("{:?} -> {:?}", rx_value.avg_before, rx_value.avg_after);
+                    results_received += 1;
+                }
+
+                //clone the transmit channel and submit the pool job
+                let tx = tx.clone();
+                let arc_bwt = arc_bwt.clone();
+                let arc_params = arc_params.clone();
+                //let rec_id: Vec<u8> = (*record.id).to_vec();
+                let read_data: LongReadFA = LongReadFA {
+                    label: String::from_utf8((*record.id).to_vec()).unwrap(),
+                    seq: String::from_utf8((*record.seq).to_vec()).unwrap()
+                };
+                println!("Submitting {:?}", jobs_queued);
+                pool.execute(move|| {
+                    let correction_results: CorrectionResults = correction_job(arc_bwt, read_data, arc_params);
+                    tx.send(correction_results).expect("channel will be there waiting for the pool");
+                });
+                jobs_queued += 1;
+            }
+            read_index += 1;
+        }
+    );
+
+    match parsing_result {
+        Ok(_) => {},
+        Err(e) => {
+            error!("Failed to parse long read file: {:?}", e);
+            std::process::exit(exitcode::IOERR);
+        }
+    };
+
+    while results_received < jobs_queued {
+        let rx_value: CorrectionResults = rx.recv().unwrap();
+        println!("{:?} -> {:?}", rx_value.avg_before, rx_value.avg_after);
+        results_received += 1;
+    }
 }

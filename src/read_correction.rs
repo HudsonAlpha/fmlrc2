@@ -1,4 +1,8 @@
 
+extern crate log;
+
+use log::info;
+use std::io::Write;
 use std::sync::Arc;
 use triple_accel::{levenshtein,levenshtein_search,Match};
 
@@ -32,19 +36,20 @@ pub struct Correction {
 }
 
 /// a struct for storing generic read
-#[derive(Clone)]
+#[derive(Clone,Debug)]
 pub struct LongReadFA {
-    label: String,
-    seq: String
+    pub label: String,
+    pub seq: String
 }
 
 /// a struct for storing the modified string
+#[derive(Clone,Debug)]
 pub struct CorrectionResults {
-    label: String,
-    original_seq: String,
-    corrected_seq: String,
-    avg_before: f64,
-    avg_after: f64
+    pub label: String,
+    pub original_seq: String,
+    pub corrected_seq: String,
+    pub avg_before: f64,
+    pub avg_after: f64
 }
 
 pub fn correction_job(arc_bwt: Arc<BitVectorBWT>, long_read: LongReadFA, arc_params: Arc<CorrectionParameters>) -> CorrectionResults {
@@ -149,17 +154,16 @@ pub fn correction_pass(bwt: &BitVectorBWT, seq_i: &Vec<u8>, params: &CorrectionP
                     //remember to rev comp this also
                     let orig: Vec<u8> = string_util::reverse_complement_i(&seq_i[0..x+kmer_size]);
                     let best_match: Option<Vec<u8>> = pick_best_levenshtein_search(&orig, bridge_points, bwt, kmer_size);
-
                     match best_match {
                         Some(bm) => {
                             //we found a best match, it will span from index 0 up to the start of the first found k-mer
-                            let truncated_seq: Vec<u8> = string_util::reverse_complement_i(&bm)[0..bm.len()-kmer_size].to_vec();
+                            let rev_comp_seq: Vec<u8> = string_util::reverse_complement_i(&bm);
                             
                             //now store the correction in range [0..x)
                             new_corr = Correction {
                                 start_pos: 0,
-                                end_pos: x,
-                                seq: truncated_seq
+                                end_pos: x+kmer_size,
+                                seq: rev_comp_seq
                             };
                             corrections_list.push(new_corr);
                         },
@@ -202,14 +206,11 @@ pub fn correction_pass(bwt: &BitVectorBWT, seq_i: &Vec<u8>, params: &CorrectionP
                     //pick out the best result from the full levenshtein
                     match best_match {
                         Some(bm) => {
-                            //we found a best match, it will span from k-mer to k-mer, but clipping "k" from each end
-                            let truncated_seq: Vec<u8> = bm[kmer_size..bm.len()-kmer_size].to_vec();
-
                             //now store the correction in range [0..x)
                             new_corr = Correction {
-                                start_pos: prev_found as usize+kmer_size,
-                                end_pos: x,
-                                seq: truncated_seq
+                                start_pos: prev_found as usize,
+                                end_pos: x+kmer_size,
+                                seq: bm
                             };
                             corrections_list.push(new_corr);
                         },
@@ -238,14 +239,11 @@ pub fn correction_pass(bwt: &BitVectorBWT, seq_i: &Vec<u8>, params: &CorrectionP
             let best_match: Option<Vec<u8>> = pick_best_levenshtein_search(&seq_i[prev_found as usize..], bridge_points, bwt, kmer_size);
             match best_match {
                 Some(bm) => {
-                    //we found a best match, it will span from index "prev_found+kmer_size" through the end
-                    let truncated_seq: Vec<u8> = bm[kmer_size..].to_vec();
-                    
                     //now store the correction in range [0..x)
                     new_corr = Correction {
-                        start_pos: prev_found as usize+kmer_size,
+                        start_pos: prev_found as usize,
                         end_pos: seq_i.len(),
-                        seq: truncated_seq
+                        seq: bm
                     };
                     corrections_list.push(new_corr);
                 },
@@ -259,9 +257,14 @@ pub fn correction_pass(bwt: &BitVectorBWT, seq_i: &Vec<u8>, params: &CorrectionP
     let mut current_position: usize = 0;
     let mut corrected_seq: Vec<u8> = Vec::<u8>::new();
     for correction in corrections_list {
-        //TODO: is there a better way than extend_from_slice?
-        //copy everything up to the correction
-        corrected_seq.extend_from_slice(&seq_i[current_position..correction.start_pos]);
+        if current_position > correction.start_pos {
+            corrected_seq.truncate(corrected_seq.len() - (current_position - correction.start_pos));
+        }
+        else {
+            //TODO: is there a better way than extend_from_slice?
+            //copy everything up to the correction
+            corrected_seq.extend_from_slice(&seq_i[current_position..correction.start_pos]);
+        }
 
         //copy in the correction
         corrected_seq.extend_from_slice(&correction.seq);
@@ -277,12 +280,12 @@ pub fn correction_pass(bwt: &BitVectorBWT, seq_i: &Vec<u8>, params: &CorrectionP
 /// This function will take an original sequence and a candidate list and pick the best candidate to return
 /// after performing some sanity checks on the mapping. It assumes that all matches must requires the first `kmer_size`
 /// characters to exactly match between the original sequence and all candidates.
-/// TODO: figure out if the checks occuring here are slowing us down, and identity ways to safely short-circuit
 /// # Arguments
 /// * `original` - the original sequence in integer format
 /// * `candidates` - the Vec of candidates, each in integer format
 /// * `bwt` - the BWT of counts (used for pileup tie-breaking)
 /// * `kmer_size` - the k-mer size to use for pileup tie-breaking
+#[inline]
 fn pick_best_levenshtein_search(original: &[u8], candidates: Vec<Vec<u8>>, bwt: &BitVectorBWT, kmer_size: usize) -> Option<Vec<u8>> {
     let mut ed_scores: Vec<Option<Match>> = Vec::<Option<Match>>::with_capacity(candidates.len());
     let mut min_score: u32 = 0xFFFFFFFF;
@@ -291,8 +294,8 @@ fn pick_best_levenshtein_search(original: &[u8], candidates: Vec<Vec<u8>>, bwt: 
         let matches: Vec<Match> = levenshtein_search(&original, &candidates[y]).collect();
         let mut best_match: Option<Match> = None;
         for m in matches {
-            //make sure the start is index 0
-            if m.start == 0 {
+            //make sure the start is index 0 and goes at least k long
+            if m.start == 0 && m.end >= kmer_size {
                 match &best_match {
                     Some(bm) => {
                         if m.k < bm.k || (m.k == bm.k && m.end < bm.end) {
@@ -369,6 +372,7 @@ fn pick_best_levenshtein_search(original: &[u8], candidates: Vec<Vec<u8>>, bwt: 
 /// * `candidates` - the Vec of candidates, each in integer format
 /// * `bwt` - the BWT of counts (used for pileup tie-breaking)
 /// * `kmer_size` - the k-mer size to use for pileup tie-breaking
+#[inline]
 fn pick_best_levenshtein(original: &[u8], candidates: Vec<Vec<u8>>, bwt: &BitVectorBWT, kmer_size: usize) -> Option<Vec<u8>> {
     //two short circuit points
     if candidates.len() == 0 {
@@ -915,7 +919,7 @@ mod tests {
         };
         let arc_params: Arc<CorrectionParameters> = Arc::new(params);
 
-        //the two strings in the bwt
+        //the one string in the bwt
         let const_string: String =  "AACGGATCAAGCTTACCAGTATTTACGT".to_string();
         
         let long_read_const_mod: LongReadFA = LongReadFA {
@@ -928,5 +932,40 @@ mod tests {
         assert_eq!(corr_results.corrected_seq, const_string);
         assert_eq!(corr_results.avg_before, 6.0);
         assert_eq!(corr_results.avg_after, 30.0);
+    }
+
+    #[test]
+    fn test_correction_deletion_special() {
+        //shared bwt
+        let bwt: BitVectorBWT = get_constant_bwt();
+        let arc_bwt: Arc<BitVectorBWT> = Arc::new(bwt);
+
+        //shared params
+        let params = CorrectionParameters {
+            kmer_sizes: vec![9],
+            min_count: 5,
+            max_branch_attempt_length: 10000,
+            branch_limit_factor: 4.0,
+            branch_buffer_factor: 1.3,
+            tail_buffer_factor: 1.00, //normally - 1.05,
+            frac: 0.1,
+            verbose: true
+        };
+        let arc_params: Arc<CorrectionParameters> = Arc::new(params);
+
+        //the one string in the bwt
+        let const_string: String =  "AACGGATCAAGCTTACCAGTATTTACGT".to_string();
+        
+        //this specific error is cause by a poly-X insertion between two adjacent X-mers
+        //here we just inserted a "T" in to the "TT" run and it triggers a panic due to the final string building
+        let long_read_const_mod: LongReadFA = LongReadFA {
+            label: "test".to_string(),
+            seq: "AACGGATCAAGCTTTACCAGTATTTACGT".to_string()
+        };
+        let corr_results = correction_job(arc_bwt, long_read_const_mod.clone(), arc_params);
+        assert_eq!(corr_results.label, long_read_const_mod.label);
+        assert_eq!(corr_results.original_seq, long_read_const_mod.seq);
+        assert_eq!(corr_results.corrected_seq, const_string);
+        
     }
 }
