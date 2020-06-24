@@ -85,7 +85,14 @@ impl IndexedBitVec {
     /// ```
     #[inline]
     pub fn rank(&self, pos: usize) -> u64{
-        self.index[pos >> 6] + ((self.bitvec.as_slice()[pos >> 6] << (!pos & 0x3f)) << 1).count_ones() as u64
+        //this was the original approach in fmlrc ported to rust
+        //self.index[pos >> 6] + ((self.bitvec[pos >> 6] << (!pos & 0x3f)) << 1).count_ones() as u64
+        //interestingly, the following match method is actually ~5% faster on average
+        //let ind = pos >> 6;
+        match (pos & 0x3f) {
+            0 => self.index[pos >> 6],
+            r => self.index[pos >> 6] + (self.bitvec[pos >> 6] << (64-r)).count_ones() as u64
+        }
     }
 }
 

@@ -38,6 +38,7 @@ pub struct Correction {
 /// a struct for storing generic read
 #[derive(Clone,Debug)]
 pub struct LongReadFA {
+    pub read_index: u64,
     pub label: String,
     pub seq: String
 }
@@ -45,6 +46,7 @@ pub struct LongReadFA {
 /// a struct for storing the modified string
 #[derive(Clone,Debug)]
 pub struct CorrectionResults {
+    pub read_index: u64,
     pub label: String,
     pub original_seq: String,
     pub corrected_seq: String,
@@ -87,6 +89,7 @@ pub fn correction_job(arc_bwt: Arc<BitVectorBWT>, long_read: LongReadFA, arc_par
 
     //send it on back y'all
     CorrectionResults {
+        read_index: long_read.read_index,
         label: long_read.label,
         original_seq: long_read.seq,
         corrected_seq: corrected_seq,
@@ -453,7 +456,7 @@ pub fn bridge_kmers(
     //the queries will populates these vectors
     let mut curr_kmer: Vec<u8> = vec![4; kmer_len];
     let mut rev_kmer: Vec<u8> = vec![4; kmer_len];
-
+    
     //initialize the bridging with our seed k-mer
     let mut possible_bridges: Vec<Vec<u8>> = Vec::<Vec<u8>>::new();
     let mut seed_vec: Vec<u8> = vec![0; kmer_len];
@@ -474,17 +477,20 @@ pub fn bridge_kmers(
 
         while curr_bridge_len < max_branch_len {
             //shift the current k-mer over one in preparation for the last base toggle
+            //functionally, these commands are simpler, but they are more costly for some reason
+            //curr_kmer.rotate_left(1);
+            //rev_kmer.rotate_right(1);
             for x in {0..kmer_len-1} {
                 curr_kmer[x] = curr_kmer[x+1];
                 rev_kmer[kmer_len-x-1] = rev_kmer[kmer_len-x-2];
             }
             
-            //do all the k-mer counting
-            max_pos = 0;
+            //do all the k-mer counting, efficient on rev-comp, then forward queries are added in
+            bwt.prefix_kmer_noalloc(&rev_kmer[1..kmer_len], &VALID_CHARS, &mut counts);
+            max_pos=0;
             for x in {0..VALID_CHARS_LEN} {
                 curr_kmer[kmer_len-1] = VALID_CHARS[x];
-                rev_kmer[0] = string_util::COMPLEMENT_INT[VALID_CHARS[x] as usize];
-                counts[x] = bwt.count_kmer(&curr_kmer) + bwt.count_kmer(&rev_kmer);
+                counts[x] += bwt.count_kmer(&curr_kmer);
                 if counts[x] > counts[max_pos] {
                     max_pos = x;
                 }
@@ -674,9 +680,16 @@ mod tests {
         for _i in {0..rep_count} {
             data.push(&const_string);
         }
+
+        //this less string is reverse-complemented so we can verify RC counting & such is working from a correction standpoint
         //                   AACGGATCAAGCTTACCAGTATTTACGT
         //                      #         #            #
         let lesser_string = "AACTGATCAAGCTGACCAGTATTTACTT"; //3 basepair changes
+        let lesser_string = string_util::convert_itos(
+            &string_util::reverse_complement_i(
+                &string_util::convert_stoi(&lesser_string)
+            )
+        );
         let lesser_count = 20;
         for _i in {0..lesser_count} {
             data.push(&lesser_string);
@@ -923,6 +936,7 @@ mod tests {
         let const_string: String =  "AACGGATCAAGCTTACCAGTATTTACGT".to_string();
         
         let long_read_const_mod: LongReadFA = LongReadFA {
+            read_index: 0,
             label: "test".to_string(),
             seq: "TACGGATCAAGCATACCAGTATGTACGT".to_string()
         };
@@ -959,10 +973,12 @@ mod tests {
         //this specific error is cause by a poly-X insertion between two adjacent X-mers
         //here we just inserted a "T" in to the "TT" run and it triggers a panic due to the final string building
         let long_read_const_mod: LongReadFA = LongReadFA {
+            read_index: 10,
             label: "test".to_string(),
             seq: "AACGGATCAAGCTTTACCAGTATTTACGT".to_string()
         };
         let corr_results = correction_job(arc_bwt, long_read_const_mod.clone(), arc_params);
+        assert_eq!(corr_results.read_index, long_read_const_mod.read_index);
         assert_eq!(corr_results.label, long_read_const_mod.label);
         assert_eq!(corr_results.original_seq, long_read_const_mod.seq);
         assert_eq!(corr_results.corrected_seq, const_string);

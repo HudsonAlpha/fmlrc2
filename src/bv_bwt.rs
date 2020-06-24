@@ -260,12 +260,10 @@ impl BitVectorBWT {
     /// * `sym` - the symbol to pre-pend in integer form
     /// * `input_range` - the range to pre-pend to
     #[inline]
-    fn constrain_range(&self, sym: u8, input_range: BWTRange) -> BWTRange {
-        let l = self.binary_bwt[sym as usize].rank(input_range.l as usize);
-        let h = self.binary_bwt[sym as usize].rank(input_range.h as usize);
+    fn constrain_range(&self, sym: u8, input_range: &BWTRange) -> BWTRange {
         BWTRange {
-            l: l,
-            h: h
+            l: self.binary_bwt[sym as usize].rank(input_range.l as usize),
+            h: self.binary_bwt[sym as usize].rank(input_range.h as usize)
         }
     }
 
@@ -295,7 +293,7 @@ impl BitVectorBWT {
         
         //TODO: test if this is the fastest way to do this loop (with internal break & such)
         for i in {0..kmer.len()}.rev() {
-            ret = self.constrain_range(kmer[i], ret);
+            ret = self.constrain_range(kmer[i], &ret);
             if ret.h == ret.l {
                 return 0;
             }
@@ -303,6 +301,80 @@ impl BitVectorBWT {
 
         //return the delta
         ret.h-ret.l
+    }
+
+    /// Returns the total number of occurrences of each given symbol before a given k-mer in the BWT.
+    /// Functionally, for a k-mer `K` and a symbol set `C`, this is identical to calculating the occurence of `cK`
+    /// for each `c` in `C`. This function reduces the work by re-using the shared components of the calculation.
+    /// # Arguments
+    /// * `kmer` - the integer-encoded kmer sequence to count
+    /// * `symbols` - the integer-encoded symbols to pre-pend to the k-mer and count.
+    /// # Examples
+    /// ```rust
+    /// # use std::io::Cursor;
+    /// # use fmlrc::bv_bwt::BitVectorBWT;
+    /// # use fmlrc::bwt_converter::convert_to_vec;
+    /// # let seq = "TG$$CAGCCG";
+    /// # let seq = Cursor::new(seq);
+    /// # let vec = convert_to_vec(seq);
+    /// # let mut bwt = BitVectorBWT::new();
+    /// # bwt.load_vector(vec);
+    /// let kmer_counts = bwt.prefix_kmer(&vec![2, 3], &vec![1, 2, 3, 5]); //count XCG
+    /// assert_eq!(kmer_counts, vec![1, 1, 0, 0]); //the set has one occurrence each of ACG and CCG
+    /// ```
+    #[inline]
+    pub fn prefix_kmer(&self, kmer: &[u8], symbols: &[u8]) -> Vec<u64> {
+        let mut ret_counts: Vec<u64> = vec![0; symbols.len()];
+        self.prefix_kmer_noalloc(kmer, symbols, &mut ret_counts[..]);
+        ret_counts
+    }
+
+    /// Populates the total number of occurrences of each given symbol before a given k-mer in the BWT.
+    /// Functionally, for a k-mer `K` and a symbol set `C`, this is identical to calculating the occurence of `cK`
+    /// for each `c` in `C`. This function reduces the work by re-using the shared components of the calculation.
+    /// This function does not allocate a count array, but populates the passed in value instead.
+    /// Returns `true` if any values are greater than 0, otherwise `false`.
+    /// # Arguments
+    /// * `kmer` - the integer-encoded kmer sequence to count
+    /// * `symbols` - the integer-encoded symbols to pre-pend to the k-mer and count.
+    /// * `counts` - a mutable array to be populated with the outputs, must be at least the same length as `symbols`
+    /// # Examples
+    /// ```rust
+    /// # use std::io::Cursor;
+    /// # use fmlrc::bv_bwt::BitVectorBWT;
+    /// # use fmlrc::bwt_converter::convert_to_vec;
+    /// # let seq = "TG$$CAGCCG";
+    /// # let seq = Cursor::new(seq);
+    /// # let vec = convert_to_vec(seq);
+    /// # let mut bwt = BitVectorBWT::new();
+    /// # bwt.load_vector(vec);
+    /// let mut kmer_counts = vec![0; 4];
+    /// bwt.prefix_kmer_noalloc(&vec![2, 3], &vec![1, 2, 3, 5], &mut kmer_counts[..]); //count XCG
+    /// assert_eq!(kmer_counts, vec![1, 1, 0, 0]); //the set has one occurrence each of ACG and CCG
+    /// ```
+    #[inline]
+    pub fn prefix_kmer_noalloc(&self, kmer: &[u8], symbols: &[u8], counts: &mut [u64]) -> bool {
+        //init to everything
+        let mut ret: BWTRange = BWTRange {
+            l: 0,
+            h: self.total_size
+        };
+        
+        //TODO: test if this is the fastest way to do this loop (with internal break & such)
+        for i in {0..kmer.len()}.rev() {
+            ret = self.constrain_range(kmer[i], &ret);
+            if ret.h == ret.l {
+                for i in {0..symbols.len()} {
+                    counts[i] = 0;
+                }
+                return false;
+            }
+        }
+        for i in {0..symbols.len()} {
+            let subrange = self.constrain_range(symbols[i], &ret);
+            counts[i] = subrange.h-subrange.l
+        }
+        true
     }
 
     /// Returns the counts for all k-mers in a given sequence as a Vec<u64>. This function looks at both forward and
@@ -399,6 +471,11 @@ mod tests {
         assert_eq!(bwt.count_kmer(&vec![1, 2, 3, 5]), 1); //ACGT
         assert_eq!(bwt.count_kmer(&vec![2, 2, 3, 3]), 1); //CCGG
         assert_eq!(bwt.count_kmer(&vec![5, 5, 5, 5]), 0); //TTTT - not present
+
+        //prefix counters
+        assert_eq!(bwt.prefix_kmer(&vec![2], &vec![1, 2, 3, 5]), vec![1, 1, 0, 0]); //XC
+        assert_eq!(bwt.prefix_kmer(&vec![2, 3], &vec![1, 2, 3, 5]), vec![1, 1, 0, 0]); //XCG
+        assert_eq!(bwt.prefix_kmer(&vec![5, 5, 5, 5], &vec![1, 2, 3, 5]), vec![0, 0, 0, 0]); //XTTTT - absent
     }
 
     #[test]

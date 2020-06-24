@@ -146,7 +146,7 @@ fn main() {
                 //if we've filled our queue, then we should wait until we get some results back
                 if jobs_queued - results_received >= JOB_SLOTS {
                     let rx_value: CorrectionResults = rx.recv().unwrap();
-                    println!("{:?} -> {:?}", rx_value.avg_before, rx_value.avg_after);
+                    println!("{:?}: {:?} -> {:?}", rx_value.read_index, rx_value.avg_before, rx_value.avg_after);
                     results_received += 1;
                 }
 
@@ -154,8 +154,8 @@ fn main() {
                 let tx = tx.clone();
                 let arc_bwt = arc_bwt.clone();
                 let arc_params = arc_params.clone();
-                //let rec_id: Vec<u8> = (*record.id).to_vec();
                 let read_data: LongReadFA = LongReadFA {
+                    read_index: read_index,
                     label: String::from_utf8((*record.id).to_vec()).unwrap(),
                     seq: String::from_utf8((*record.seq).to_vec()).unwrap()
                 };
@@ -180,7 +180,7 @@ fn main() {
 
     while results_received < jobs_queued {
         let rx_value: CorrectionResults = rx.recv().unwrap();
-        println!("{:?} -> {:?}", rx_value.avg_before, rx_value.avg_after);
+        println!("{:?}: {:?} -> {:?}", rx_value.read_index, rx_value.avg_before, rx_value.avg_after);
         results_received += 1;
     }
 }
