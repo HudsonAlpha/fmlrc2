@@ -7,13 +7,13 @@ extern crate needletail;
 
 use log::{info, error};
 use needletail::parse_sequence_path;
-use std::fs::{File, OpenOptions};
-use std::path::Path;
+use std::fs::File;
 use std::sync::{Arc, mpsc};
 use threadpool::ThreadPool;
 
-use fmlrc::read_correction::{CorrectionParameters, CorrectionResults, LongReadFA, correction_job};
 use fmlrc::bv_bwt::BitVectorBWT;
+use fmlrc::ordered_fasta_writer::OrderedFastaWriter;
+use fmlrc::read_correction::{CorrectionParameters, CorrectionResults, LongReadFA, correction_job};
 
 fn main() {
     //initialize logging for our benefit later
@@ -58,8 +58,8 @@ fn main() {
 
     info!("Input parameters (required):");
     info!("\tBWT: \"{}\"", bwt_fn);
-    let bwt_file: File = match File::open(&bwt_fn) {
-        Ok(file) => file,
+    match File::open(&bwt_fn) {
+        Ok(_) => {},
         Err(e) => {
             error!("Failed to open BWT file: {:?}", e);
             std::process::exit(exitcode::NOINPUT);
@@ -67,8 +67,8 @@ fn main() {
     };
     
     info!("\tInput reads: \"{}\"", long_read_fn);
-    let read_file: File = match File::open(&long_read_fn) {
-        Ok(file) => file,
+    match File::open(&long_read_fn) {
+        Ok(_) => {},
         Err(e) => {
             error!("Failed to open input reads file: {:?}", e);
             std::process::exit(exitcode::NOINPUT);
@@ -83,6 +83,7 @@ fn main() {
             std::process::exit(exitcode::NOINPUT);
         }
     };
+    let mut fasta_writer = OrderedFastaWriter::new(&write_file);
     
     info!("Execution Parameters:");
     info!("\tverbose: {}", verbose_mode);
@@ -146,7 +147,16 @@ fn main() {
                 //if we've filled our queue, then we should wait until we get some results back
                 if jobs_queued - results_received >= JOB_SLOTS {
                     let rx_value: CorrectionResults = rx.recv().unwrap();
-                    println!("{:?}: {:?} -> {:?}", rx_value.read_index, rx_value.avg_before, rx_value.avg_after);
+                    if verbose_mode {
+                        println!("{:?}: {:?} -> {:?}", rx_value.read_index, rx_value.avg_before, rx_value.avg_after);
+                    }
+                    match fasta_writer.write_correction(rx_value) {
+                        Ok(()) => {},
+                        Err(e) => {
+                            error!("Failed while writing read correction: {:?}", e);
+                            std::process::exit(exitcode::IOERR);
+                        }
+                    };
                     results_received += 1;
                 }
 
@@ -180,7 +190,16 @@ fn main() {
 
     while results_received < jobs_queued {
         let rx_value: CorrectionResults = rx.recv().unwrap();
-        println!("{:?}: {:?} -> {:?}", rx_value.read_index, rx_value.avg_before, rx_value.avg_after);
+        if verbose_mode {
+            println!("{:?}: {:?} -> {:?}", rx_value.read_index, rx_value.avg_before, rx_value.avg_after);
+        }
+        match fasta_writer.write_correction(rx_value) {
+            Ok(()) => {},
+            Err(e) => {
+                error!("Failed while writing read correction: {:?}", e);
+                std::process::exit(exitcode::IOERR);
+            }
+        };
         results_received += 1;
     }
 }
