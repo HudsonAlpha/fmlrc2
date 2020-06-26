@@ -1,7 +1,6 @@
 
 use bio::io::fasta;
 use std::collections::HashMap;
-use std::fs;
 use std::io;
 
 use crate::read_correction::CorrectionResults;
@@ -119,6 +118,7 @@ impl <W: io::Write> OrderedFastaWriter<W> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
     use tempfile::{Builder, NamedTempFile};
 
     #[test]

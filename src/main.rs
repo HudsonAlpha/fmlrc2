@@ -21,6 +21,7 @@ fn main() {
 
     //non-cli parameters
     const JOB_SLOTS: u64 = 10000;
+    const UPDATE_INTERVAL: u64 = 10000;
 
     //this is the CLI block, params that get populated appear before
     let mut bwt_fn: String = String::new();
@@ -109,8 +110,8 @@ fn main() {
     
     //TODO make some of these hard-coded into params?
     let my_params: CorrectionParameters = CorrectionParameters {
-        kmer_sizes: kmer_sizes,
-        min_count: min_count,
+        kmer_sizes,
+        min_count,
         max_branch_attempt_length: 10000,
         branch_limit_factor: branch_factor,
         branch_buffer_factor: 1.3,
@@ -139,6 +140,8 @@ fn main() {
     let mut read_index: u64 = 0;
     let mut jobs_queued: u64 = 0;
     let mut results_received: u64 = 0;
+
+    info!("Starting read correction processes...");
     let parsing_result = parse_sequence_path(
         long_read_fn,
         |_| {},
@@ -148,7 +151,7 @@ fn main() {
                 if jobs_queued - results_received >= JOB_SLOTS {
                     let rx_value: CorrectionResults = rx.recv().unwrap();
                     if verbose_mode {
-                        println!("{:?}: {:?} -> {:?}", rx_value.read_index, rx_value.avg_before, rx_value.avg_after);
+                        info!("Job #{:?}: {:.2} -> {:.2}", rx_value.read_index, rx_value.avg_before, rx_value.avg_after);
                     }
                     match fasta_writer.write_correction(rx_value) {
                         Ok(()) => {},
@@ -158,6 +161,9 @@ fn main() {
                         }
                     };
                     results_received += 1;
+                    if results_received % UPDATE_INTERVAL == 0 {
+                        info!("Processed {} reads...", results_received);
+                    }
                 }
 
                 //clone the transmit channel and submit the pool job
@@ -165,11 +171,11 @@ fn main() {
                 let arc_bwt = arc_bwt.clone();
                 let arc_params = arc_params.clone();
                 let read_data: LongReadFA = LongReadFA {
-                    read_index: read_index,
+                    read_index: jobs_queued,
                     label: String::from_utf8((*record.id).to_vec()).unwrap(),
                     seq: String::from_utf8((*record.seq).to_vec()).unwrap()
                 };
-                println!("Submitting {:?}", jobs_queued);
+                //println!("Submitting {:?}", jobs_queued);
                 pool.execute(move|| {
                     let correction_results: CorrectionResults = correction_job(arc_bwt, read_data, arc_params);
                     tx.send(correction_results).expect("channel will be there waiting for the pool");
@@ -191,7 +197,7 @@ fn main() {
     while results_received < jobs_queued {
         let rx_value: CorrectionResults = rx.recv().unwrap();
         if verbose_mode {
-            println!("{:?}: {:?} -> {:?}", rx_value.read_index, rx_value.avg_before, rx_value.avg_after);
+            info!("Job #{:?}: {:.2} -> {:.2}", rx_value.read_index, rx_value.avg_before, rx_value.avg_after);
         }
         match fasta_writer.write_correction(rx_value) {
             Ok(()) => {},
@@ -201,5 +207,9 @@ fn main() {
             }
         };
         results_received += 1;
+        if results_received % UPDATE_INTERVAL == 0 {
+            info!("Processed {} reads...", results_received);
+        }
     }
+    info!("Finished processing {} total reads in range [{}, {})", results_received, begin_id, end_id);
 }

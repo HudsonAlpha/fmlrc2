@@ -17,7 +17,7 @@ use subprocess::{Exec, Redirection};
 /// let data: Vec<&str> = vec!["CCGT", "ACG"];
 /// assert_eq!(create_bwt_from_strings(&data).unwrap(), "GT$$ACCCG\n".to_string());
 /// ```
-pub fn create_bwt_from_strings(data: &Vec<&str>) -> Result<String, Box<dyn std::error::Error>> {
+pub fn create_bwt_from_strings(data: &[&str]) -> Result<String, Box<dyn std::error::Error>> {
     info!("Concatenating string vector...");
     let join_data = data.join("\n");
     info!("Running BWT construction pipeline from strings...");
@@ -35,7 +35,7 @@ pub fn create_bwt_from_strings(data: &Vec<&str>) -> Result<String, Box<dyn std::
 /// Returns a streamable result from the ropebwt2 command.
 /// # Argument
 /// * `fastqs` - a vector of fastq filenames
-pub fn stream_bwt_from_fastqs(fastqs: &Vec<&str>) -> Result<Box<dyn Read>, Box<dyn std::error::Error>> {
+pub fn stream_bwt_from_fastqs(fastqs: &[&str]) -> Result<Box<dyn Read>, Box<dyn std::error::Error>> {
     info!("Streaming BWT construction pipeline from gzipped FASTQ files:\n{:?}", fastqs);
     let mut initial_command = Exec::cmd("gunzip").arg("-c");
     for fq in fastqs {
@@ -81,7 +81,7 @@ mod tests {
         let mut gz = GzBuilder::new().write(file, Compression::default());
         let mut i: usize = 0;
         for s in data {
-            writeln!(gz, "@seq_{}\n{}\n{}\n{}", i, s, "+", "F".repeat(s.len())).unwrap();
+            writeln!(gz, "@seq_{}\n{}\n+\n{}", i, s, "F".repeat(s.len())).unwrap();
             i += 1;
         }
 

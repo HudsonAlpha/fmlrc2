@@ -9,6 +9,9 @@ use crate::bwt_converter::*;
 use crate::indexed_bit_vec::IndexedBitVec;
 use crate::string_util;
 
+const ZERO_COUNT_VEC: [u64; 256] = [0; 256];
+
+/// Structure that contains a bit vector-based BWT+FM-index implementation
 pub struct BitVectorBWT {
     bwt: Vec<u8>,
     //TODO: look into ArrayVec or raw array for speed, no reason to pre-mature optimize it though
@@ -27,6 +30,25 @@ pub struct BWTRange {
     h: u64
 }
 
+impl Default for BitVectorBWT {
+    /// Default function
+    /// # Examples
+    /// ```rust
+    /// use fmlrc::bv_bwt::BitVectorBWT;
+    /// let mut bwt: BitVectorBWT = Default::default();
+    /// ```    
+    fn default() -> Self {
+        Self {
+            bwt: Vec::<u8>::new(),
+            binary_bwt: Vec::<IndexedBitVec>::new(),
+            total_counts: [0; VC_LEN],
+            start_index: [0; VC_LEN],
+            end_index: [0; VC_LEN],
+            total_size: 0
+        }
+    }
+}
+
 /// Implements a BWT and FM-index based on indexed bit vectors. The implementation is quite fast compared to traditional
 /// sampled FM-index, but requires more space. In general, for `N` characters with alphabet size `C`, one can expect approximately
 /// 2*C*N bits of storage for both the BWT and the corresponding index. 
@@ -38,16 +60,7 @@ impl BitVectorBWT {
     /// let mut bwt: BitVectorBWT = BitVectorBWT::new();
     /// ```
     pub fn new() -> Self {
-        Self {
-            bwt: Vec::<u8>::new(),
-            //binary_bwt: [IndexedBitVec::with_capacity(0); VC_LEN],
-            //binary_bwt: std::iter::repeat_with(|| IndexedBitVec::with_capacity(0)).take(VC_LEN).collect::<[IndexedBitVec; VC_LEN]>>().into_inner(),
-            binary_bwt: Vec::<IndexedBitVec>::new(),
-            total_counts: [0; VC_LEN],
-            start_index: [0; VC_LEN],
-            end_index: [0; VC_LEN],
-            total_size: 0
-        }
+        Default::default()
     }
 
     /// Initializes the BWT from a compressed BWT vector.
@@ -78,7 +91,7 @@ impl BitVectorBWT {
     /// # Arguments
     /// * `filename` - the name of the file to load into memory
     // TODO: figure out how to write a test for this
-    pub fn load_numpy_file(&mut self, filename: &String) -> std::io::Result<()> {
+    pub fn load_numpy_file(&mut self, filename: &str) -> std::io::Result<()> {
         //read the numpy header: http://docs.scipy.org/doc/numpy-1.10.1/neps/npy-format.html
         //get the initial file size
         let file_metadata: fs::Metadata = fs::metadata(&filename)?;
@@ -158,7 +171,7 @@ impl BitVectorBWT {
         self.start_index = [0; VC_LEN];
         self.end_index = [0; VC_LEN];
         let mut sum_offset: u64 = 0;
-        for i in {0..VC_LEN} {
+        for i in 0..VC_LEN {
             self.start_index[i] = sum_offset;
             sum_offset += self.total_counts[i];
             self.end_index[i] = sum_offset;
@@ -175,7 +188,7 @@ impl BitVectorBWT {
         //setup vectors
         info!("Allocating binary vectors...");
         self.binary_bwt = Vec::<IndexedBitVec>::with_capacity(VC_LEN);
-        for x in {0..VC_LEN} {
+        for x in 0..VC_LEN {
             if x != 0 || store_dollar {
                 self.binary_bwt.push(IndexedBitVec::with_capacity(self.total_size as usize));
             }
@@ -194,7 +207,7 @@ impl BitVectorBWT {
         //now we loop through the compressed BWT
         info!("Calculating binary vectors...");
         let num_bytes: usize = self.bwt.len();
-        for x in {0..num_bytes} {
+        for x in 0..num_bytes {
             current_char = self.bwt[x] & MASK;
             if current_char == prev_char {
                 //same char, increment lengths
@@ -204,7 +217,7 @@ impl BitVectorBWT {
             else {
                 //first save the current FM-index entry
                 if prev_char != 0 || store_dollar {
-                    for y in {bwt_index..bwt_index+total_char_count} {
+                    for y in bwt_index..bwt_index+total_char_count {
                         self.binary_bwt[prev_char as usize].set_bit(y as usize);
                     }
                 }
@@ -219,14 +232,14 @@ impl BitVectorBWT {
         
         //do the last block of characters
         if prev_char != 0 || store_dollar {
-            for y in {bwt_index..bwt_index+total_char_count} {
+            for y in bwt_index..bwt_index+total_char_count {
                 self.binary_bwt[prev_char as usize].set_bit(y as usize);
             }
         }
         
         //build the indices for each vector
         info!("Constructing FM-indices...");
-        for x in {0..VC_LEN} {
+        for x in 0..VC_LEN {
             if x != 0 || store_dollar {
                 self.binary_bwt[x].build_index(self.start_index[x]);
             }
@@ -260,10 +273,10 @@ impl BitVectorBWT {
     /// * `sym` - the symbol to pre-pend in integer form
     /// * `input_range` - the range to pre-pend to
     #[inline]
-    fn constrain_range(&self, sym: u8, input_range: &BWTRange) -> BWTRange {
+    unsafe fn constrain_range(&self, sym: u8, input_range: &BWTRange) -> BWTRange {
         BWTRange {
-            l: self.binary_bwt[sym as usize].rank(input_range.l as usize),
-            h: self.binary_bwt[sym as usize].rank(input_range.h as usize)
+            l: self.binary_bwt.get_unchecked(sym as usize).rank_unchecked(input_range.l as usize),
+            h: self.binary_bwt.get_unchecked(sym as usize).rank_unchecked(input_range.h as usize)
         }
     }
 
@@ -292,8 +305,11 @@ impl BitVectorBWT {
         };
         
         //TODO: test if this is the fastest way to do this loop (with internal break & such)
-        for i in {0..kmer.len()}.rev() {
-            ret = self.constrain_range(kmer[i], &ret);
+        for c in kmer.iter().rev() {
+            assert!(*c < VC_LEN as u8);
+            unsafe {
+                ret = self.constrain_range(*c, &ret);
+            }
             if ret.h == ret.l {
                 return 0;
             }
@@ -361,19 +377,84 @@ impl BitVectorBWT {
         };
         
         //TODO: test if this is the fastest way to do this loop (with internal break & such)
-        for i in {0..kmer.len()}.rev() {
-            ret = self.constrain_range(kmer[i], &ret);
+        for c in kmer.iter().rev() {
+            assert!(*c < VC_LEN as u8);
+            unsafe {
+                ret = self.constrain_range(*c, &ret);
+            }
             if ret.h == ret.l {
-                for i in {0..symbols.len()} {
-                    counts[i] = 0;
-                }
+                counts[0..symbols.len()].clone_from_slice(&ZERO_COUNT_VEC[0..symbols.len()]);
                 return false;
             }
         }
-        for i in {0..symbols.len()} {
-            let subrange = self.constrain_range(symbols[i], &ret);
+        for (i, c) in symbols.iter().enumerate() {
+            assert!(*c < VC_LEN as u8);
+            let subrange = unsafe { self.constrain_range(*c, &ret) };
             counts[i] = subrange.h-subrange.l
         }
+        true
+    }
+
+    #[inline]
+    pub fn prefix_revkmer_noalloc(&self, kmer: &[u8], symbols: &[u8], counts: &mut [u64]) -> bool {
+        //init to everything
+        let mut ret: BWTRange = BWTRange {
+            l: 0,
+            h: self.total_size
+        };
+        
+        //TODO: test if this is the fastest way to do this loop (with internal break & such)
+        for c in kmer.iter() {
+            assert!(*c < VC_LEN as u8);
+            unsafe {
+                ret = self.constrain_range(*c, &ret);
+            }
+            if ret.h == ret.l {
+                counts[0..symbols.len()].clone_from_slice(&ZERO_COUNT_VEC[0..symbols.len()]);
+                return false;
+            }
+        }
+        for (i, c) in symbols.iter().enumerate() {
+            assert!(*c < VC_LEN as u8);
+            let subrange = unsafe { self.constrain_range(*c, &ret) };
+            counts[i] = subrange.h-subrange.l
+        }
+        true
+    }
+
+    #[inline]
+    pub fn prefix_revkmer_noalloc_fixed(&self, kmer: &[u8], counts: &mut [u64]) -> bool {
+        //init to everything
+        assert!(counts.len() >= 4);
+        let mut ret: BWTRange = BWTRange {
+            l: 0,
+            h: self.total_size
+        };
+        
+        //TODO: test if this is the fastest way to do this loop (with internal break & such)
+        for c in kmer.iter() {
+            assert!(*c < VC_LEN as u8);
+            unsafe {
+                ret = self.constrain_range(*c, &ret);
+            }
+            if ret.h == ret.l {
+                //counts[0..4].clone_from_slice(&ZERO_COUNT_VEC[0..4]);
+                counts[0] = 0;
+                counts[1] = 0;
+                counts[2] = 0;
+                counts[3] = 0;
+                return false;
+            }
+        }
+        //A C G T
+        let subrange = unsafe { self.constrain_range(1, &ret) };
+        counts[0] = subrange.h-subrange.l;
+        let subrange = unsafe { self.constrain_range(2, &ret) };
+        counts[1] = subrange.h-subrange.l;
+        let subrange = unsafe { self.constrain_range(3, &ret) };
+        counts[2] = subrange.h-subrange.l;
+        let subrange = unsafe { self.constrain_range(5, &ret) };
+        counts[3] = subrange.h-subrange.l;
         true
     }
 
@@ -395,7 +476,7 @@ impl BitVectorBWT {
     /// assert_eq!(pu, vec![4, 2]); //counts include reverse-complement
     /// ```
     #[inline]
-    pub fn count_pileup(&self, seq: &Vec<u8>, kmer_size: usize) -> Vec<u64> {
+    pub fn count_pileup(&self, seq: &[u8], kmer_size: usize) -> Vec<u64> {
         let seq_len = seq.len();
         if seq_len < kmer_size {
             return vec![0];
@@ -407,7 +488,7 @@ impl BitVectorBWT {
         //build up return and count the k-mers
         let num_counts = seq_len - kmer_size + 1;
         let mut ret = Vec::<u64>::with_capacity(num_counts);
-        for x in {0..num_counts} {
+        for x in 0..num_counts {
             ret.push(
                 self.count_kmer(&seq[x..x+kmer_size])+
                 self.count_kmer(&rev_seq[seq_len-kmer_size-x..seq_len-x])
@@ -439,7 +520,7 @@ mod tests {
         let expected_starts = vec![0, 2, 3, 6, 9, 9];
         let expected_ends = vec![2, 3, 6, 9, 9, 10];
 
-        for i in {0..6} {
+        for i in 0..6 {
             //make sure the total counts are correct
             assert_eq!(bwt.get_total_counts(i as u8), expected_totals[i]);
             assert_eq!(bwt.start_index[i], expected_starts[i]);
@@ -503,7 +584,7 @@ mod tests {
         let mut gz = GzBuilder::new().write(file, Compression::default());
         let mut i: usize = 0;
         for s in data {
-            writeln!(gz, "@seq_{}\n{}\n{}\n{}", i, s, "+", "F".repeat(s.len())).unwrap();
+            writeln!(gz, "@seq_{}\n{}\n+\n{}", i, s, "F".repeat(s.len())).unwrap();
             i += 1;
         }
 
@@ -535,7 +616,7 @@ mod tests {
         bwt.load_numpy_file(&filename).unwrap();
 
         let expected_totals = vec![3, 1, 3, 2, 1, 1];
-        for i in {0..6} {
+        for i in 0..6 {
             //make sure the total counts are correct
             assert_eq!(bwt.get_total_counts(i as u8), expected_totals[i]);
         }

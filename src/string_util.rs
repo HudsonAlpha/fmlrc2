@@ -1,15 +1,15 @@
 
 /// contains ASCII to integer encoding
-static STRING_TO_INT: [u8; 256] = build_stoi();
+const STRING_TO_INT: [u8; 256] = build_stoi();
 
 /// contains integer to ASCII encoding
-static INT_TO_STRING: [u8; 6] = [
-    '$' as u8, 'A' as u8, 'C' as u8, 
-    'G' as u8, 'N' as u8, 'T' as u8
+const INT_TO_STRING: [u8; 6] = [
+    b'$', b'A', b'C', 
+    b'G', b'N', b'T'
 ];
 
 /// for complementing in the integer space; note that $ and N go to themselves
-pub static COMPLEMENT_INT: [u8; 6] = [0, 5, 3, 2, 4, 1]; //$ACGNT -> $TGCNA
+pub const COMPLEMENT_INT: [u8; 6] = [0, 5, 3, 2, 4, 1]; //$ACGNT -> $TGCNA
 
 /// builds up the STRING_TO_INT const for us
 const fn build_stoi() -> [u8; 256] {
@@ -44,9 +44,9 @@ const fn build_stoi() -> [u8; 256] {
 #[inline]
 pub fn reverse_complement_i(seq: &[u8]) -> Vec<u8> {
     let seq_len = seq.len();
-    let mut ret: Vec<u8> = Vec::<u8>::with_capacity(seq_len);
-    for c in seq.iter().rev() {
-        ret.push(COMPLEMENT_INT[*c as usize]);
+    let mut ret: Vec<u8> = vec![0; seq_len];
+    for (i, c) in seq.iter().rev().enumerate() {
+        ret[i] = COMPLEMENT_INT[*c as usize];
     }
     ret
 }
@@ -64,9 +64,9 @@ pub fn reverse_complement_i(seq: &[u8]) -> Vec<u8> {
 #[inline]
 pub fn convert_stoi(seq: &str) -> Vec<u8> {
     let seq_len = seq.len();
-    let mut ret: Vec<u8> = Vec::<u8>::with_capacity(seq_len);
-    for c in seq.bytes() {
-        ret.push(STRING_TO_INT[c as usize]);
+    let mut ret: Vec<u8> = vec![0; seq_len];
+    for (i, c) in seq.bytes().enumerate() {
+        ret[i] = STRING_TO_INT[c as usize];
     }
     ret
 }
@@ -84,11 +84,11 @@ pub fn convert_stoi(seq: &str) -> Vec<u8> {
 #[inline]
 pub fn convert_itos(iseq: &[u8]) -> String {
     let seq_len = iseq.len();
-    let mut ret: String = String::with_capacity(seq_len);
-    for i in iseq {
-        ret.push(INT_TO_STRING[*i as usize] as char);
+    let mut ret_vec: Vec<u8> = vec![0; seq_len];
+    for (i, v) in iseq.iter().enumerate() {
+        ret_vec[i] = INT_TO_STRING[*v as usize];
     }
-    ret
+    String::from_utf8(ret_vec).unwrap()
 }
 
 #[cfg(test)]

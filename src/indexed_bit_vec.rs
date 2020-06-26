@@ -23,8 +23,8 @@ impl IndexedBitVec {
         let index_size: usize = (round::ceil((size as f64) / 64.0, 0) as usize)+1;
         let bitvec = vec![0; index_size];
 		Self {
-            index_size: index_size,
-            bitvec: bitvec,
+            index_size,
+            bitvec,
             index: vec![0; index_size]
         }
     }
@@ -40,12 +40,12 @@ impl IndexedBitVec {
     /// ```
     #[inline]
     pub fn set_bit(&mut self, pos: usize) {
-        self.bitvec[pos >> 6] |= (0x1 << (pos & 0x3F));
+        self.bitvec[pos >> 6] |= 0x1 << (pos & 0x3F);
     }
 
     /// Currently, this function is strictly for testing
     #[inline]
-    fn get_bit(&mut self, pos: usize) -> bool {
+    pub fn get_bit(&mut self, pos: usize) -> bool {
         ((self.bitvec[pos >> 6] >> (pos & 0x3F)) & 0x1) != 0
     }
 
@@ -61,11 +61,10 @@ impl IndexedBitVec {
     /// ibv.build_index(initial_rank);
     /// ```
     pub fn build_index(&mut self, initial_rank: u64) {
-        let slice: &[u64] = self.bitvec.as_slice();
         let mut current_rank = initial_rank;
-        for i in {0..self.index_size-1} {
+        for (i, bv_val) in self.bitvec.iter().enumerate().take(self.index_size-1) {
             self.index[i] = current_rank;
-            current_rank += slice[i].count_ones() as u64
+            current_rank += bv_val.count_ones() as u64
         }
         self.index[self.index_size-1] = current_rank;
     }
@@ -84,14 +83,21 @@ impl IndexedBitVec {
     /// assert_eq!(ibv.rank(65), initial_rank+1);
     /// ```
     #[inline]
-    pub fn rank(&self, pos: usize) -> u64{
+    pub fn rank(&self, pos: usize) -> u64 {
         //this was the original approach in fmlrc ported to rust
         //self.index[pos >> 6] + ((self.bitvec[pos >> 6] << (!pos & 0x3f)) << 1).count_ones() as u64
         //interestingly, the following match method is actually ~5% faster on average
-        //let ind = pos >> 6;
-        match (pos & 0x3f) {
+        match pos & 0x3f {
             0 => self.index[pos >> 6],
             r => self.index[pos >> 6] + (self.bitvec[pos >> 6] << (64-r)).count_ones() as u64
+        }
+    }
+
+    #[inline]
+    pub unsafe fn rank_unchecked(&self, pos:usize) -> u64 {
+        match pos & 0x3f {
+            0 => *self.index.get_unchecked(pos >> 6),
+            r => self.index.get_unchecked(pos >> 6) + (self.bitvec.get_unchecked(pos >> 6) << (64-r)).count_ones() as u64
         }
     }
 }
@@ -115,16 +121,16 @@ mod tests {
     fn test_set_bit() {
         //array with 128 "1"s, then 128 "0"s, then 1 "1"
         let mut ibv = IndexedBitVec::with_capacity(257);
-        for i in {0..128} {
+        for i in 0..128 {
             ibv.set_bit(i);
         }
         ibv.set_bit(256);
 
         //check the sets
-        for i in {0..128} {
+        for i in 0..128 {
             assert_eq!(ibv.get_bit(i), true);
         }
-        for i in {128..25} {
+        for i in 128..256 {
             assert_eq!(ibv.get_bit(i), false);
         }
         assert_eq!(ibv.get_bit(256), true);
@@ -132,10 +138,10 @@ mod tests {
         //check that our slicing is correct also
         let slice: &[u64] = ibv.bitvec.as_slice();
         assert_eq!(slice.len(), 6);
-        for i in {0..2} {
+        for i in 0..2 {
             assert_eq!(slice[i], 0xffffffffffffffff);
         }
-        for i in {2..4} {
+        for i in 2..4 {
             assert_eq!(slice[i], 0x0);
         }
         assert_eq!(slice[4], 0x1)
@@ -145,7 +151,7 @@ mod tests {
     fn test_indexing() {
         //array with 128 "1"s, then 128 "0"s, then 1 "1"
         let mut ibv = IndexedBitVec::with_capacity(257);
-        for i in {0..128} {
+        for i in 0..128 {
             ibv.set_bit(i);
         }
         ibv.set_bit(256);
@@ -154,13 +160,13 @@ mod tests {
         let slice: &[u64] = ibv.index.as_slice();
         assert_eq!(slice.len(), 6);
         let counts = vec![0, 64, 128, 128, 128, 129];
-        for i in {0..slice.len()} {
+        for i in 0..slice.len() {
             assert_eq!(counts[i], slice[i]);
         }
 
         //progressively adding bits
         let mut ibv = IndexedBitVec::with_capacity(64);
-        for i in {0..64} {
+        for i in 0..64 {
             ibv.set_bit(i);
             ibv.build_index(0);
             let slice: &[u64] = ibv.index.as_slice();
@@ -172,7 +178,7 @@ mod tests {
     fn test_offset() {
         //progressively adding bits
         let mut ibv = IndexedBitVec::with_capacity(64);
-        for i in {0..64} {
+        for i in 0..64 {
             ibv.set_bit(i);
         }
         ibv.build_index(100);
@@ -184,16 +190,16 @@ mod tests {
     fn test_rank() {
         //array with 128 "1"s, then 128 "0"s, then 1 "1"
         let mut ibv = IndexedBitVec::with_capacity(257);
-        for i in {0..128} {
+        for i in 0..128 {
             ibv.set_bit(i);
         }
         ibv.set_bit(256);
         ibv.build_index(0);
 
-        for i in {0..128} {
+        for i in 0..128 {
             assert_eq!(ibv.rank(i), i as u64);
         }
-        for i in {128..257} {
+        for i in 128..257 {
             assert_eq!(ibv.rank(i), 128);
         }
         assert_eq!(ibv.rank(257), 129);

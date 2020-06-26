@@ -1,8 +1,6 @@
 
 extern crate log;
 
-use log::info;
-use std::io::Write;
 use std::sync::Arc;
 use triple_accel::{levenshtein,levenshtein_search,Match};
 
@@ -69,32 +67,32 @@ pub fn correction_job(arc_bwt: Arc<BitVectorBWT>, long_read: LongReadFA, arc_par
     
     //convert back to a string
     let corrected_seq: String = string_util::convert_itos(&seq_i);
-
-    let avg_before: f64;
-    let avg_after: f64;
-    if params.verbose {
-        //TODO: is there a way to pre-serve this from earlier? this mode will always take longer, so it's not a huge deal
+    
+    let avg_before: f64 = if params.verbose {
         let orig_seq: Vec<u8> = string_util::convert_stoi(&long_read.seq);
         let counts_before: Vec<u64> = bwt.count_pileup(&orig_seq, params.kmer_sizes[0]);
-        let counts_after: Vec<u64> = bwt.count_pileup(&seq_i, params.kmer_sizes[0]);
         let sum_before: u64 = counts_before.iter().sum();
+        sum_before as f64 / counts_before.len() as f64
+    } else {
+        0.0
+    };
+    let avg_after: f64 = if params.verbose {
+        //TODO: is there a way to pre-serve this from earlier? this mode will always take longer, so it's not a huge deal
+        let counts_after: Vec<u64> = bwt.count_pileup(&seq_i, params.kmer_sizes[0]);
         let sum_after: u64 = counts_after.iter().sum();
-        avg_before = sum_before as f64 / counts_before.len() as f64;
-        avg_after = sum_after as f64 / counts_after.len() as f64;
-    }
-    else {
-        avg_before = 0.0;
-        avg_after = 0.0;
-    }
+        sum_after as f64 / counts_after.len() as f64
+    } else {
+        0.0
+    };
 
     //send it on back y'all
     CorrectionResults {
         read_index: long_read.read_index,
         label: long_read.label,
         original_seq: long_read.seq,
-        corrected_seq: corrected_seq,
-        avg_before: avg_before,
-        avg_after: avg_after
+        corrected_seq,
+        avg_before,
+        avg_after
     }
 }
 
@@ -106,12 +104,12 @@ pub fn correction_job(arc_bwt: Arc<BitVectorBWT>, long_read: LongReadFA, arc_par
 /// * `seq_i` - the sequence to correct in integer form
 /// * `params` - the correction parameters to use
 /// * `kmer_size` - the length of k-mer (i.e. `k`) to use for this pass
-pub fn correction_pass(bwt: &BitVectorBWT, seq_i: &Vec<u8>, params: &CorrectionParameters, kmer_size: usize) -> Vec<u8> {
+pub fn correction_pass(bwt: &BitVectorBWT, seq_i: &[u8], params: &CorrectionParameters, kmer_size: usize) -> Vec<u8> {
     //count up the initial pileups
     let pileup: Vec<u64> = bwt.count_pileup(seq_i, kmer_size);
     let nz_med = stats_util::calculate_bounded_median(&pileup, params.min_count);
     if nz_med < params.min_count {
-        return seq_i.clone();
+        return seq_i.to_owned();
     }
     let pileup_size: usize = pileup.len();
     
@@ -157,22 +155,17 @@ pub fn correction_pass(bwt: &BitVectorBWT, seq_i: &Vec<u8>, params: &CorrectionP
                     //remember to rev comp this also
                     let orig: Vec<u8> = string_util::reverse_complement_i(&seq_i[0..x+kmer_size]);
                     let best_match: Option<Vec<u8>> = pick_best_levenshtein_search(&orig, bridge_points, bwt, kmer_size);
-                    match best_match {
-                        Some(bm) => {
-                            //we found a best match, it will span from index 0 up to the start of the first found k-mer
-                            let rev_comp_seq: Vec<u8> = string_util::reverse_complement_i(&bm);
-                            
-                            //now store the correction in range [0..x)
-                            new_corr = Correction {
-                                start_pos: 0,
-                                end_pos: x+kmer_size,
-                                seq: rev_comp_seq
-                            };
-                            corrections_list.push(new_corr);
-                        },
-                        None => {
-                            //no match was found that works
-                        }
+                    if let Some(bm) = best_match {
+                        //we found a best match, it will span from index 0 up to the start of the first found k-mer
+                        let rev_comp_seq: Vec<u8> = string_util::reverse_complement_i(&bm);
+                        
+                        //now store the correction in range [0..x)
+                        new_corr = Correction {
+                            start_pos: 0,
+                            end_pos: x+kmer_size,
+                            seq: rev_comp_seq
+                        };
+                        corrections_list.push(new_corr);
                     }
                 }
             }
@@ -187,7 +180,7 @@ pub fn correction_pass(bwt: &BitVectorBWT, seq_i: &Vec<u8>, params: &CorrectionP
                     bridge_points = bridge_kmers(bwt, &seed_kmer, &target_kmer, threshold, branch_limit, max_branch_length);
 
                     //try reverse complement if we failed
-                    if bridge_points.len() == 0 {
+                    if bridge_points.is_empty() {
                         bridge_points = bridge_kmers(
                             bwt, 
                             &string_util::reverse_complement_i(&target_kmer),
@@ -198,8 +191,8 @@ pub fn correction_pass(bwt: &BitVectorBWT, seq_i: &Vec<u8>, params: &CorrectionP
                         );
                         
                         //make sure to rev-comp the results here
-                        for y in {0..bridge_points.len()} {
-                            bridge_points[y] = string_util::reverse_complement_i(&bridge_points[y]);
+                        for bp in &mut bridge_points {
+                            *bp = string_util::reverse_complement_i(&bp);
                         }
                     }
                     
@@ -207,19 +200,14 @@ pub fn correction_pass(bwt: &BitVectorBWT, seq_i: &Vec<u8>, params: &CorrectionP
                     let best_match: Option<Vec<u8>> = pick_best_levenshtein(&seq_i[prev_found as usize..x+kmer_size], bridge_points, bwt, kmer_size);
 
                     //pick out the best result from the full levenshtein
-                    match best_match {
-                        Some(bm) => {
-                            //now store the correction in range [0..x)
-                            new_corr = Correction {
-                                start_pos: prev_found as usize,
-                                end_pos: x+kmer_size,
-                                seq: bm
-                            };
-                            corrections_list.push(new_corr);
-                        },
-                        None => {
-                            //no match was found that works
-                        }
+                    if let Some(bm) = best_match {
+                        //now store the correction in range [0..x)
+                        new_corr = Correction {
+                            start_pos: prev_found as usize,
+                            end_pos: x+kmer_size,
+                            seq: bm
+                        };
+                        corrections_list.push(new_corr);
                     }
                 }
             }
@@ -240,19 +228,14 @@ pub fn correction_pass(bwt: &BitVectorBWT, seq_i: &Vec<u8>, params: &CorrectionP
             
             //now get the best match
             let best_match: Option<Vec<u8>> = pick_best_levenshtein_search(&seq_i[prev_found as usize..], bridge_points, bwt, kmer_size);
-            match best_match {
-                Some(bm) => {
-                    //now store the correction in range [0..x)
-                    new_corr = Correction {
-                        start_pos: prev_found as usize,
-                        end_pos: seq_i.len(),
-                        seq: bm
-                    };
-                    corrections_list.push(new_corr);
-                },
-                None => {
-                    //no match was found that works
-                }
+            if let Some(bm) = best_match {
+                //now store the correction in range [0..x)
+                new_corr = Correction {
+                    start_pos: prev_found as usize,
+                    end_pos: seq_i.len(),
+                    seq: bm
+                };
+                corrections_list.push(new_corr);
             }
         }
     }
@@ -292,9 +275,9 @@ pub fn correction_pass(bwt: &BitVectorBWT, seq_i: &Vec<u8>, params: &CorrectionP
 fn pick_best_levenshtein_search(original: &[u8], candidates: Vec<Vec<u8>>, bwt: &BitVectorBWT, kmer_size: usize) -> Option<Vec<u8>> {
     let mut ed_scores: Vec<Option<Match>> = Vec::<Option<Match>>::with_capacity(candidates.len());
     let mut min_score: u32 = 0xFFFFFFFF;
-    for y in {0..candidates.len()} {
+    for candidate in candidates.iter() {
         //calculate the min distance
-        let matches: Vec<Match> = levenshtein_search(&original, &candidates[y]).collect();
+        let matches: Vec<Match> = levenshtein_search(&original, &candidate).collect();
         let mut best_match: Option<Match> = None;
         for m in matches {
             //make sure the start is index 0 and goes at least k long
@@ -326,7 +309,7 @@ fn pick_best_levenshtein_search(original: &[u8], candidates: Vec<Vec<u8>>, bwt: 
     
     //get everything with a good score
     let mut candidates_ed: Vec<Vec<u8>> = Vec::<Vec<u8>>::with_capacity(candidates.len());
-    for y in {0..candidates.len()} {
+    for y in 0..candidates.len() {
         match &ed_scores[y] {
             Some(eds) => {
                 if eds.k == min_score {
@@ -339,13 +322,13 @@ fn pick_best_levenshtein_search(original: &[u8], candidates: Vec<Vec<u8>>, bwt: 
         }
     }
 
-    if candidates_ed.len() == 0 {
+    if candidates_ed.is_empty() {
         //do nothing, we didn't find anything good
-        return None;
+        None
     }
     else if candidates_ed.len() == 1 {
         //only one with smallest edit distance
-        return Some(candidates_ed.remove(0));
+        Some(candidates_ed.remove(0))
     }
     else {
         //figure out which of the ones with equal edit distance has the most counts
@@ -353,8 +336,8 @@ fn pick_best_levenshtein_search(original: &[u8], candidates: Vec<Vec<u8>>, bwt: 
         let mut max_id: usize = 0;
         let mut ed_pu: Vec<u64>;
         let mut summation: u64;
-        for y in {0..candidates_ed.len()} {
-            ed_pu = bwt.count_pileup(&candidates_ed[y], kmer_size);
+        for (y, candidate) in candidates_ed.iter().enumerate() {
+            ed_pu = bwt.count_pileup(&candidate, kmer_size);
             summation = ed_pu.iter().sum();
             if summation > max_counts {
                 max_id = y;
@@ -363,7 +346,7 @@ fn pick_best_levenshtein_search(original: &[u8], candidates: Vec<Vec<u8>>, bwt: 
         }
 
         //now return the best candidate
-        return Some(candidates_ed.remove(max_id));
+        Some(candidates_ed.remove(max_id))
     }
 }
 
@@ -378,27 +361,27 @@ fn pick_best_levenshtein_search(original: &[u8], candidates: Vec<Vec<u8>>, bwt: 
 #[inline]
 fn pick_best_levenshtein(original: &[u8], candidates: Vec<Vec<u8>>, bwt: &BitVectorBWT, kmer_size: usize) -> Option<Vec<u8>> {
     //two short circuit points
-    if candidates.len() == 0 {
+    if candidates.is_empty() {
         //no valid bridges were found
-        return None;
+        None
     }
     else if candidates.len() == 1 {
         //only one valid bridge, so short circuit here
-        return Some(candidates[0].clone());
+        Some(candidates[0].clone())
     }
     else {
         //we have multiple values, so check for edit distance
         let mut ed_scores: Vec<u32> = Vec::<u32>::with_capacity(candidates.len());
-        for y in {0..candidates.len()} {
+        for candidate in candidates.iter() {
             //calculate the min distance
-            let score: u32 = levenshtein(&original, &candidates[y]);
+            let score: u32 = levenshtein(&original, &candidate);
             ed_scores.push(score);
         }
         let min_score: u32 = *ed_scores.iter().min().unwrap();
 
         //get everything with a good score
         let mut candidates_ed: Vec<Vec<u8>> = Vec::<Vec<u8>>::with_capacity(candidates.len());
-        for y in {0..candidates.len()} {
+        for y in 0..candidates.len() {
             if ed_scores[y] == min_score {
                 candidates_ed.push(candidates[y].clone());
             }
@@ -406,7 +389,7 @@ fn pick_best_levenshtein(original: &[u8], candidates: Vec<Vec<u8>>, bwt: &BitVec
 
         if candidates_ed.len() == 1 {
             //only one with smallest edit distance
-            return Some(candidates_ed.remove(0));
+            Some(candidates_ed.remove(0))
         }
         else {
             //figure out which of the ones with equal edit distance has the most counts
@@ -414,8 +397,8 @@ fn pick_best_levenshtein(original: &[u8], candidates: Vec<Vec<u8>>, bwt: &BitVec
             let mut max_id: usize = 0;
             let mut ed_pu: Vec<u64>;
             let mut summation: u64;
-            for y in {0..candidates_ed.len()} {
-                ed_pu = bwt.count_pileup(&candidates_ed[y], kmer_size);
+            for (y, candidate) in candidates_ed.iter().enumerate() {
+                ed_pu = bwt.count_pileup(&candidate, kmer_size);
                 summation = ed_pu.iter().sum();
                 if summation > max_counts {
                     max_id = y;
@@ -424,7 +407,7 @@ fn pick_best_levenshtein(original: &[u8], candidates: Vec<Vec<u8>>, bwt: &BitVec
             }
 
             //now return the best candidate
-            return Some(candidates_ed.remove(max_id));
+            Some(candidates_ed.remove(max_id))
         }
     }
 }
@@ -454,25 +437,31 @@ pub fn bridge_kmers(
     let mut max_pos: usize;
 
     //the queries will populates these vectors
-    let mut curr_kmer: Vec<u8> = vec![4; kmer_len];
-    let mut rev_kmer: Vec<u8> = vec![4; kmer_len];
-    
+    //let mut curr_kmer: Vec<u8> = vec![4; kmer_len];
+    //let mut rev_kmer: Vec<u8> = vec![4; kmer_len];
+    let mut curr_buffer: Vec<u8> = vec![4; max_branch_len];
+    let mut rev_buffer: Vec<u8> = vec![4; max_branch_len];
+
     //initialize the bridging with our seed k-mer
     let mut possible_bridges: Vec<Vec<u8>> = Vec::<Vec<u8>>::new();
     let mut seed_vec: Vec<u8> = vec![0; kmer_len];
     seed_vec.clone_from_slice(seed_kmer);
     possible_bridges.push(seed_vec);
 
-    while possible_bridges.len() > 0 && num_branched < branch_limit {
+    while !possible_bridges.is_empty() && num_branched < branch_limit {
         //get a bridge to extend
         let mut curr_bridge: Vec<u8> = possible_bridges.pop().unwrap();
         let mut curr_bridge_len = curr_bridge.len();
+        let mut curr_offset: usize = 0;
         num_branched += 1;
 
         //TODO: replace this with copy slice and call to string_util::reverse_complement_i?
-        for x in {0..kmer_len} {
-            curr_kmer[x] = curr_bridge[curr_bridge_len-kmer_len+x];
-            rev_kmer[kmer_len-x-1] = string_util::COMPLEMENT_INT[curr_kmer[x] as usize];
+        for x in 0..kmer_len {
+            //curr_kmer[x] = curr_bridge[curr_bridge_len-kmer_len+x];
+            //rev_kmer[kmer_len-x-1] = string_util::COMPLEMENT_INT[curr_kmer[x] as usize];
+            curr_buffer[x] = curr_bridge[curr_bridge_len-kmer_len+x];
+            //rev_buffer[max_branch_len-x-1] = string_util::COMPLEMENT_INT[curr_buffer[x] as usize];
+            rev_buffer[x] = string_util::COMPLEMENT_INT[curr_buffer[x] as usize];
         }
 
         while curr_bridge_len < max_branch_len {
@@ -480,17 +469,26 @@ pub fn bridge_kmers(
             //functionally, these commands are simpler, but they are more costly for some reason
             //curr_kmer.rotate_left(1);
             //rev_kmer.rotate_right(1);
-            for x in {0..kmer_len-1} {
+            /*
+            for x in 0..kmer_len-1 {
                 curr_kmer[x] = curr_kmer[x+1];
                 rev_kmer[kmer_len-x-1] = rev_kmer[kmer_len-x-2];
             }
+            */
+            curr_offset += 1;
             
             //do all the k-mer counting, efficient on rev-comp, then forward queries are added in
-            bwt.prefix_kmer_noalloc(&rev_kmer[1..kmer_len], &VALID_CHARS, &mut counts);
+            //bwt.prefix_kmer_noalloc(&rev_kmer[1..kmer_len], &VALID_CHARS, &mut counts);
+            //bwt.prefix_kmer_noalloc(&rev_buffer[max_branch_len-curr_offset-kmer_len+1..max_branch_len-curr_offset], &VALID_CHARS, &mut counts);
+            //bwt.prefix_kmer_noalloc(&(rev_buffer[curr_offset+1..curr_offset+kmer_len].iter().rev().map(|x| *x).collect::<Vec<u8>>())[..], &VALID_CHARS, &mut counts);
+            //bwt.prefix_revkmer_noalloc(&rev_buffer[curr_offset+1..curr_offset+kmer_len], &VALID_CHARS, &mut counts);
+            bwt.prefix_revkmer_noalloc_fixed(&rev_buffer[curr_offset+1..curr_offset+kmer_len], &mut counts);
             max_pos=0;
-            for x in {0..VALID_CHARS_LEN} {
-                curr_kmer[kmer_len-1] = VALID_CHARS[x];
-                counts[x] += bwt.count_kmer(&curr_kmer);
+            for x in 0..VALID_CHARS_LEN {
+                //curr_kmer[kmer_len-1] = VALID_CHARS[x];
+                //counts[x] += bwt.count_kmer(&curr_kmer);
+                curr_buffer[curr_offset+kmer_len-1] = VALID_CHARS[x];
+                counts[x] += bwt.count_kmer(&curr_buffer[curr_offset..curr_offset+kmer_len]);
                 if counts[x] > counts[max_pos] {
                     max_pos = x;
                 }
@@ -504,7 +502,7 @@ pub fn bridge_kmers(
 
             //the best is good enough, time to see just how many are good enough
             curr_bridge.push(4);
-            for x in {0..VALID_CHARS_LEN} {
+            for x in 0..VALID_CHARS_LEN {
                 if x != max_pos && counts[x] >= min_count {
                     curr_bridge[curr_bridge_len] = VALID_CHARS[x];
                     possible_bridges.push(curr_bridge.clone());
@@ -521,11 +519,13 @@ pub fn bridge_kmers(
             curr_bridge_len += 1;
             
             //update k-mers
-            curr_kmer[kmer_len-1] = VALID_CHARS[max_pos];
-            rev_kmer[0] = string_util::COMPLEMENT_INT[VALID_CHARS[max_pos] as usize];
+            //curr_kmer[kmer_len-1] = VALID_CHARS[max_pos];
+            //rev_kmer[0] = string_util::COMPLEMENT_INT[VALID_CHARS[max_pos] as usize];
+            curr_buffer[curr_offset+kmer_len-1] = VALID_CHARS[max_pos];
+            rev_buffer[max_branch_len-curr_offset-kmer_len] = string_util::COMPLEMENT_INT[VALID_CHARS[max_pos] as usize];
 
             //check if we found the target
-            if curr_kmer == target_kmer {
+            if &curr_buffer[curr_offset..curr_offset+kmer_len] == target_kmer {
                 //add this bridge
                 ret.push(curr_bridge.clone());
                 
@@ -539,10 +539,10 @@ pub fn bridge_kmers(
 
     //return the list of found bridges
     if num_branched < branch_limit {
-        return ret;
+        ret
     }
     else {
-        return Vec::<Vec<u8>>::new();
+        Vec::<Vec<u8>>::new()
     }
 }
 
@@ -568,28 +568,28 @@ pub fn assemble_from_kmer(
     seed_vec.clone_from_slice(seed_kmer);
     possible_bridges.push(seed_vec);
 
-    while possible_bridges.len() > 0 && num_branched < branch_limit {
+    while !possible_bridges.is_empty() && num_branched < branch_limit {
         //get a bridge to extend
         let mut curr_bridge: Vec<u8> = possible_bridges.pop().unwrap();
         let mut curr_bridge_len = curr_bridge.len();
         num_branched += 1;
 
         //TODO: replace this with copy slice and call to string_util::reverse_complement_i?
-        for x in {0..kmer_len} {
+        for x in 0..kmer_len {
             curr_kmer[x] = curr_bridge[curr_bridge_len-kmer_len+x];
             rev_kmer[kmer_len-x-1] = string_util::COMPLEMENT_INT[curr_kmer[x] as usize];
         }
 
         while curr_bridge_len < max_branch_len {
             //shift the current k-mer over one in preparation for the last base toggle
-            for x in {0..kmer_len-1} {
+            for x in 0..kmer_len-1 {
                 curr_kmer[x] = curr_kmer[x+1];
                 rev_kmer[kmer_len-x-1] = rev_kmer[kmer_len-x-2];
             }
             
             //do all the k-mer counting
             max_pos = 0;
-            for x in {0..VALID_CHARS_LEN} {
+            for x in 0..VALID_CHARS_LEN {
                 curr_kmer[kmer_len-1] = VALID_CHARS[x];
                 rev_kmer[0] = string_util::COMPLEMENT_INT[VALID_CHARS[x] as usize];
                 counts[x] = bwt.count_kmer(&curr_kmer) + bwt.count_kmer(&rev_kmer);
@@ -606,7 +606,7 @@ pub fn assemble_from_kmer(
 
             //the best is good enough, time to see just how many are good enough
             curr_bridge.push(4);
-            for x in {0..VALID_CHARS_LEN} {
+            for x in 0..VALID_CHARS_LEN {
                 if x != max_pos && counts[x] >= min_count {
                     curr_bridge[curr_bridge_len] = VALID_CHARS[x];
                     possible_bridges.push(curr_bridge.clone());
@@ -639,10 +639,10 @@ pub fn assemble_from_kmer(
 
     //return the list of found bridges
     if num_branched < branch_limit {
-        return ret;
+        ret
     }
     else {
-        return Vec::<Vec<u8>>::new();
+        Vec::<Vec<u8>>::new()
     }
 }
 
@@ -659,7 +659,7 @@ mod tests {
         let const_string = "AACGGATCAAGCTTACCAGTATTTACGT";
         let rep_count = 30;
         let mut data: Vec<&str> = vec![];
-        for _i in {0..rep_count} {
+        for _i in 0..rep_count {
             data.push(&const_string);
         }
 
@@ -677,7 +677,7 @@ mod tests {
         let const_string = "AACGGATCAAGCTTACCAGTATTTACGT";
         let rep_count = 30;
         let mut data: Vec<&str> = vec![];
-        for _i in {0..rep_count} {
+        for _i in 0..rep_count {
             data.push(&const_string);
         }
 
@@ -691,7 +691,7 @@ mod tests {
             )
         );
         let lesser_count = 20;
-        for _i in {0..lesser_count} {
+        for _i in 0..lesser_count {
             data.push(&lesser_string);
         }
 
@@ -709,7 +709,7 @@ mod tests {
         let const_string = "AACGGATACACACACACACACTTTACGT";
         let rep_count = 30;
         let mut data: Vec<&str> = vec![];
-        for _i in {0..rep_count} {
+        for _i in 0..rep_count {
             data.push(&const_string);
         }
 

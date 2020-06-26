@@ -31,40 +31,37 @@ pub const COUNT_MASK: u8 = 0x1F;
 pub fn convert_to_vec(bwt: impl Read) -> Vec<u8> {
     let mut translate: [u8; 256] = [255; 256];
     let valid_symbols = "$ACGNT";
-    let mut x = 0;
-    for c in valid_symbols.bytes() {
-        translate[c as usize] = x;
-        x += 1;
+    //let mut x = 0;
+    for (x, c) in valid_symbols.bytes().enumerate() {
+        translate[c as usize] = x as u8;
     }
     
     let mut ret = Vec::<u8>::new();
     let mut curr: u8 = 36; //'$' - can be any valid character as long as count below is 0
     let mut count: u64 = 0;
-    let mut sym_count: [u64; VC_LEN] = [0; VC_LEN];
+    let mut sym_count: [u64; 6] = [0; 6];
     for c in bwt.bytes() {
         let ch = c.unwrap();
         if ch == curr {
             count += 1;
         }
+        else if translate[ch as usize] == 255 {
+            //10 is newline, which we can ignore
+            if ch != 10 {
+                panic!("Unexpected symbol in input: char \"{}\"", curr);
+            }
+        }
         else {
-            if translate[ch as usize] == 255 {
-                //10 is newline, which we can ignore
-                if ch != 10 {
-                    panic!("Unexpected symbol in input: char \"{}\"", curr);
-                }
+            //end of run, add the total to the vector
+            //debug stuff - symCount[translator[currSym]] += currCount;
+            sym_count[translate[curr as usize] as usize] += count;
+            while count > 0 {
+                let write_byte: u8 = translate[curr as usize] | ((count as u8 & COUNT_MASK) << LETTER_BITS) as u8;
+                ret.push(write_byte);
+                count >>= NUMBER_BITS;
             }
-            else {
-                //end of run, add the total to the vector
-                //debug stuff - symCount[translator[currSym]] += currCount;
-                sym_count[translate[curr as usize] as usize] += count;
-                while count > 0 {
-                    let write_byte: u8 = translate[curr as usize] | ((count as u8 & COUNT_MASK) << LETTER_BITS) as u8;
-                    ret.push(write_byte);
-                    count = count >> NUMBER_BITS;
-                }
-                curr = ch;
-                count = 1;
-            }
+            curr = ch;
+            count = 1;
         }
     }
 
@@ -79,7 +76,7 @@ pub fn convert_to_vec(bwt: impl Read) -> Vec<u8> {
         while count > 0 {
             let write_byte: u8 = translate[curr as usize] | ((count as u8 & COUNT_MASK) << LETTER_BITS) as u8;
             ret.push(write_byte);
-            count = count >> NUMBER_BITS;
+            count >>= NUMBER_BITS;
         }
     }
     info!("Converted BWT with symbol counts: {:?}", sym_count);
@@ -93,14 +90,14 @@ pub fn convert_to_vec(bwt: impl Read) -> Vec<u8> {
 /// # Arguments
 /// * `bwt` - a data type implementing Read that represents the compressed BWT
 /// * `filename` - the filename to save the output to
-pub fn save_bwt_numpy(bwt: impl Read, filename: &String) -> Result<(), Box<dyn std::error::Error>> {
+pub fn save_bwt_numpy(bwt: impl Read, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
     let npy_file: File = File::create(filename)?;
     let mut buffer = BufWriter::new(npy_file);
-    buffer.write(&[32; 95])?;
-    buffer.write(&[10; 1])?;
+    buffer.write_all(&[32; 95])?;
+    buffer.write_all(&[10; 1])?;
     let mut num_bytes: u64 = 0;
     for c in bwt.bytes() {
-        buffer.write(&[c?])?;
+        buffer.write_all(&[c?])?;
         num_bytes += 1;
     }
     buffer.flush()?;
@@ -110,9 +107,9 @@ pub fn save_bwt_numpy(bwt: impl Read, filename: &String) -> Result<(), Box<dyn s
     let mut npy_file: File = OpenOptions::new().write(true).open(filename)?;
 
     //header format - "header_string" -> length of data -> "header_tail"
-    npy_file.write(header_string)?;
-    npy_file.write(num_bytes.to_string().as_bytes())?;
-    npy_file.write(header_tail)?;
+    npy_file.write_all(header_string)?;
+    npy_file.write_all(num_bytes.to_string().as_bytes())?;
+    npy_file.write_all(header_tail)?;
     npy_file.flush()?;
     
     Ok(())

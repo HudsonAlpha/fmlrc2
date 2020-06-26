@@ -29,7 +29,7 @@ pub fn calculate_bounded_median(in_array: &[u64], min_value: u64) -> u64 {
         }
     }
     
-    return match allowed_values.len() {
+    match allowed_values.len() {
         0 => 0,
         1 => allowed_values[0],
         count => {
