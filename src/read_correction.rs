@@ -522,7 +522,8 @@ pub fn bridge_kmers(
             //curr_kmer[kmer_len-1] = VALID_CHARS[max_pos];
             //rev_kmer[0] = string_util::COMPLEMENT_INT[VALID_CHARS[max_pos] as usize];
             curr_buffer[curr_offset+kmer_len-1] = VALID_CHARS[max_pos];
-            rev_buffer[max_branch_len-curr_offset-kmer_len] = string_util::COMPLEMENT_INT[VALID_CHARS[max_pos] as usize];
+            //rev_buffer[max_branch_len-curr_offset-kmer_len] = string_util::COMPLEMENT_INT[VALID_CHARS[max_pos] as usize];
+            rev_buffer[curr_offset+kmer_len-1] = string_util::COMPLEMENT_INT[VALID_CHARS[max_pos] as usize];
 
             //check if we found the target
             if &curr_buffer[curr_offset..curr_offset+kmer_len] == target_kmer {
