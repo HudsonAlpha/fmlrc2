@@ -460,7 +460,6 @@ pub fn bridge_kmers(
             //curr_kmer[x] = curr_bridge[curr_bridge_len-kmer_len+x];
             //rev_kmer[kmer_len-x-1] = string_util::COMPLEMENT_INT[curr_kmer[x] as usize];
             curr_buffer[x] = curr_bridge[curr_bridge_len-kmer_len+x];
-            //rev_buffer[max_branch_len-x-1] = string_util::COMPLEMENT_INT[curr_buffer[x] as usize];
             rev_buffer[x] = string_util::COMPLEMENT_INT[curr_buffer[x] as usize];
         }
 
@@ -475,18 +474,25 @@ pub fn bridge_kmers(
                 rev_kmer[kmer_len-x-1] = rev_kmer[kmer_len-x-2];
             }
             */
+            
             curr_offset += 1;
             
             //do all the k-mer counting, efficient on rev-comp, then forward queries are added in
-            //bwt.prefix_kmer_noalloc(&rev_kmer[1..kmer_len], &VALID_CHARS, &mut counts);
+            /*
+            bwt.prefix_kmer_noalloc(&rev_kmer[1..kmer_len], &VALID_CHARS, &mut counts);
+            counts.reverse();
+            */
             //bwt.prefix_kmer_noalloc(&rev_buffer[max_branch_len-curr_offset-kmer_len+1..max_branch_len-curr_offset], &VALID_CHARS, &mut counts);
             //bwt.prefix_kmer_noalloc(&(rev_buffer[curr_offset+1..curr_offset+kmer_len].iter().rev().map(|x| *x).collect::<Vec<u8>>())[..], &VALID_CHARS, &mut counts);
             //bwt.prefix_revkmer_noalloc(&rev_buffer[curr_offset+1..curr_offset+kmer_len], &VALID_CHARS, &mut counts);
-            bwt.prefix_revkmer_noalloc_fixed(&rev_buffer[curr_offset+1..curr_offset+kmer_len], &mut counts);
+            bwt.prefix_revkmer_noalloc_fixed(&rev_buffer[curr_offset..curr_offset+kmer_len-1], &mut counts);
+            counts.reverse();
             max_pos=0;
             for x in 0..VALID_CHARS_LEN {
                 //curr_kmer[kmer_len-1] = VALID_CHARS[x];
-                //counts[x] += bwt.count_kmer(&curr_kmer);
+                //rev_kmer[0] = string_util::COMPLEMENT_INT[VALID_CHARS[x] as usize];
+                //counts[x] = bwt.count_kmer(&curr_kmer) + bwt.count_kmer(&rev_kmer);
+                
                 curr_buffer[curr_offset+kmer_len-1] = VALID_CHARS[x];
                 counts[x] += bwt.count_kmer(&curr_buffer[curr_offset..curr_offset+kmer_len]);
                 if counts[x] > counts[max_pos] {
@@ -522,11 +528,11 @@ pub fn bridge_kmers(
             //curr_kmer[kmer_len-1] = VALID_CHARS[max_pos];
             //rev_kmer[0] = string_util::COMPLEMENT_INT[VALID_CHARS[max_pos] as usize];
             curr_buffer[curr_offset+kmer_len-1] = VALID_CHARS[max_pos];
-            //rev_buffer[max_branch_len-curr_offset-kmer_len] = string_util::COMPLEMENT_INT[VALID_CHARS[max_pos] as usize];
             rev_buffer[curr_offset+kmer_len-1] = string_util::COMPLEMENT_INT[VALID_CHARS[max_pos] as usize];
 
             //check if we found the target
             if &curr_buffer[curr_offset..curr_offset+kmer_len] == target_kmer {
+            //if curr_kmer == target_kmer {
                 //add this bridge
                 ret.push(curr_bridge.clone());
                 
@@ -653,7 +659,7 @@ mod tests {
     use std::io::Cursor;
     use crate::bwt_converter::convert_to_vec;
     use crate::ropebwt2_util::create_bwt_from_strings;
-    use crate::string_util::convert_stoi;
+    use crate::string_util::{convert_stoi, reverse_complement_i};
     
     fn get_constant_bwt() -> BitVectorBWT {
         //build the dataset
@@ -739,6 +745,13 @@ mod tests {
         let bridges = bridge_kmers(&bwt, &seed, &target, min_count, branch_lim, max_branch_len);
         assert_eq!(bridges.len(), 1);
         assert_eq!(bridges[0], query);
+        
+        //now do it in reverse complement space
+        let rev_seed = reverse_complement_i(&target);
+        let rev_target = reverse_complement_i(&seed);
+        let rev_bridges = bridge_kmers(&bwt, &rev_seed, &rev_target, min_count, branch_lim, max_branch_len);
+        assert_eq!(rev_bridges.len(), 1);
+        assert_eq!(rev_bridges[0], reverse_complement_i(&query));
     }
 
     #[test]
