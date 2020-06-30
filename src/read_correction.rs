@@ -436,9 +436,7 @@ pub fn bridge_kmers(
     let mut num_branched: usize = 0;
     let mut max_pos: usize;
 
-    //the queries will populates these vectors
-    //let mut curr_kmer: Vec<u8> = vec![4; kmer_len];
-    //let mut rev_kmer: Vec<u8> = vec![4; kmer_len];
+    //these buffers are used to create query slices
     let mut curr_buffer: Vec<u8> = vec![4; max_branch_len];
     let mut rev_buffer: Vec<u8> = vec![4; max_branch_len];
 
@@ -455,38 +453,20 @@ pub fn bridge_kmers(
         let mut curr_offset: usize = 0;
         num_branched += 1;
 
-        //TODO: replace this with copy slice and call to string_util::reverse_complement_i?
+        //TODO: replace this with copy slice? not sure how to do the rev comp in a one-line
         for x in 0..kmer_len {
-            //curr_kmer[x] = curr_bridge[curr_bridge_len-kmer_len+x];
-            //rev_kmer[kmer_len-x-1] = string_util::COMPLEMENT_INT[curr_kmer[x] as usize];
             curr_buffer[x] = curr_bridge[curr_bridge_len-kmer_len+x];
             rev_buffer[x] = string_util::COMPLEMENT_INT[curr_buffer[x] as usize];
         }
 
         while curr_bridge_len < max_branch_len {
-            //shift the current k-mer over one in preparation for the last base toggle
-            //functionally, these commands are simpler, but they are more costly for some reason
-            //curr_kmer.rotate_left(1);
-            //rev_kmer.rotate_right(1);
-            /*
-            for x in 0..kmer_len-1 {
-                curr_kmer[x] = curr_kmer[x+1];
-                rev_kmer[kmer_len-x-1] = rev_kmer[kmer_len-x-2];
-            }
-            */
-            
+            //increase the offset into our buffers (i.e. shift the curr k-mer left and rev k-mer right)
             curr_offset += 1;
             
             //do all the k-mer counting, efficient on rev-comp, then forward queries are added in
-            /*
-            bwt.prefix_kmer_noalloc(&rev_kmer[1..kmer_len], &VALID_CHARS, &mut counts);
-            counts.reverse();
-            */
-            //bwt.prefix_kmer_noalloc(&rev_buffer[max_branch_len-curr_offset-kmer_len+1..max_branch_len-curr_offset], &VALID_CHARS, &mut counts);
-            //bwt.prefix_kmer_noalloc(&(rev_buffer[curr_offset+1..curr_offset+kmer_len].iter().rev().map(|x| *x).collect::<Vec<u8>>())[..], &VALID_CHARS, &mut counts);
-            //bwt.prefix_revkmer_noalloc(&rev_buffer[curr_offset+1..curr_offset+kmer_len], &VALID_CHARS, &mut counts);
             bwt.prefix_revkmer_noalloc_fixed(&rev_buffer[curr_offset..curr_offset+kmer_len-1], &mut counts);
-            counts.reverse();
+            //counts.reverse();
+            
             max_pos=0;
             for x in 0..VALID_CHARS_LEN {
                 //curr_kmer[kmer_len-1] = VALID_CHARS[x];
