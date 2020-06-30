@@ -15,6 +15,8 @@ use fmlrc::bv_bwt::BitVectorBWT;
 use fmlrc::ordered_fasta_writer::OrderedFastaWriter;
 use fmlrc::read_correction::{CorrectionParameters, CorrectionResults, LongReadFA, correction_job};
 
+const VERSION: Option<&'static str> = option_env!("CARGO_PKG_VERSION");
+
 fn main() {
     //initialize logging for our benefit later
     env_logger::from_env(env_logger::Env::default().default_filter_or("info")).init();
@@ -22,6 +24,7 @@ fn main() {
     //non-cli parameters
     const JOB_SLOTS: u64 = 10000;
     const UPDATE_INTERVAL: u64 = 10000;
+    let version_string: String = "fmlrc v".to_string()+&VERSION.unwrap_or("?").to_string();
 
     //this is the CLI block, params that get populated appear before
     let mut bwt_fn: String = String::new();
@@ -34,13 +37,12 @@ fn main() {
     let mut min_count: u64 = 5;
     let mut min_frac: f64 = 0.1;
     let mut branch_factor: f64 = 4.0;
-    let mut print_version: bool = false;
     let mut verbose_mode: bool = false;
     {
         let mut ap = argparse::ArgumentParser::new();
         ap.set_description("FM-index Long Read Corrector - Rust implementation");
         //optional parameters
-        ap.refer(&mut print_version).add_option(&["-v", "--version"], argparse::StoreTrue, "print version number and exit");
+        ap.add_option(&["-v", "--version"], argparse::Print(version_string), "print version number and exit");
         ap.refer(&mut verbose_mode).add_option(&["-V", "--verbose"], argparse::StoreTrue, "enable verbose output");
         ap.refer(&mut kmer_sizes).add_option(&["-k", "-K", "--kmer_size"], argparse::Collect, "k-mer sizes for correction, can be specified multiple times (default: \"-k 21 -K 59\")");
         ap.refer(&mut threads).add_option(&["-t", "--threads"], argparse::Store, "number of correction threads (default: 1)");

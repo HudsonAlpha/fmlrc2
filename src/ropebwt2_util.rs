@@ -70,7 +70,10 @@ mod tests {
     use std::io::Write;
     use tempfile::{Builder, NamedTempFile};
     
+    //these tests are marked as ignore because if someone doesn't have ropebwt2 installed (or any of the command really),
+    // then these will obviously fail inexplicable
     #[test]
+    #[ignore]
     fn test_from_strings() {
         let data: Vec<&str> = vec!["CCGT", "ACG", "N"];
         assert_eq!(create_bwt_from_strings(&data).unwrap(), "GTN$$ACCC$G\n".to_string());
@@ -90,6 +93,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_from_fastqs() {
         //create a temporary file and get the filename out
         let data: Vec<&str> = vec!["CCGT", "N"];

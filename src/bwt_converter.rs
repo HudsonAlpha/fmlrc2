@@ -80,6 +80,7 @@ pub fn convert_to_vec(bwt: impl Read) -> Vec<u8> {
         }
     }
     info!("Converted BWT with symbol counts: {:?}", sym_count);
+    info!("RLE-BWT byte length: {:?}", ret.len());
 
     ret
 }
@@ -103,7 +104,7 @@ pub fn save_bwt_numpy(bwt: impl Read, filename: &str) -> Result<(), Box<dyn std:
     buffer.flush()?;
 
     let header_string = b"\x93NUMPY\x01\x00\x56\x00{\'descr\': \'|u1\', \'fortran_order\': False, \'shape\': (";
-    let header_tail = b", ), }";
+    let header_tail = b", ), }"; //added a space after ',' here, so slightly different but functionally identical
     let mut npy_file: File = OpenOptions::new().write(true).open(filename)?;
 
     //header format - "header_string" -> length of data -> "header_tail"
