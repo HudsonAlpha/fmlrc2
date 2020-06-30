@@ -427,13 +427,14 @@ impl BitVectorBWT {
             h: self.total_size
         };
         
-        //TODO: test if this is the fastest way to do this loop (with internal break & such)
+        //iterate forward
         for c in rev_kmer.iter() {
             assert!(*c < VC_LEN as u8);
             unsafe {
                 ret = self.constrain_range(*c, &ret);
             }
             if ret.h == ret.l {
+                //impossible to have any counts now, zero them out
                 counts[0] = 0;
                 counts[1] = 0;
                 counts[2] = 0;
