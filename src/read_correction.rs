@@ -20,6 +20,7 @@ pub struct CorrectionParameters {
     pub branch_limit_factor: f64,
     pub branch_buffer_factor: f64,
     //TODO: add a tail_truncate_factor that buts a bounding box around min length and max length
+    pub midpoint_ed_factor: f64,
     pub tail_buffer_factor: f64,
     pub frac: f64,
     //fm_bit_power: u8, //only matters for classic mode which isn't implemented currently
@@ -212,7 +213,7 @@ pub fn correction_pass(bwt: &BitVectorBWT, seq_i: &[u8], params: &CorrectionPara
                         //no bridges were found, try to extend into the midpoint
                         let mid_point: usize = (prev_found as usize+x+kmer_size) / 2;
                         max_branch_length = (params.tail_buffer_factor*(mid_point - prev_found as usize) as f64) as usize;
-                        let max_edit_distance: u32 = ((mid_point - prev_found as usize) as f32 * 0.4) as u32;
+                        let max_edit_distance: u32 = ((mid_point - prev_found as usize) as f64 * params.midpoint_ed_factor) as u32;
 
                         //extend left to midpoint
                         bridge_points = assemble_from_kmer(bwt, &seed_kmer, threshold, branch_limit, max_branch_length);
@@ -836,6 +837,7 @@ mod tests {
             max_branch_attempt_length: 10000,
             branch_limit_factor: 4.0,
             branch_buffer_factor: 1.3,
+            midpoint_ed_factor: 0.4,
             tail_buffer_factor: 1.00, //normally - 1.05,
             frac: 0.1,
             verbose: true
@@ -881,6 +883,7 @@ mod tests {
             max_branch_attempt_length: 10000,
             branch_limit_factor: 4.0,
             branch_buffer_factor: 1.3,
+            midpoint_ed_factor: 0.4,
             tail_buffer_factor: 1.00, //normally - 1.05,
             frac: 0.1,
             verbose: true
@@ -950,6 +953,7 @@ mod tests {
             max_branch_attempt_length: 10000,
             branch_limit_factor: 4.0,
             branch_buffer_factor: 1.3,
+            midpoint_ed_factor: 0.4,
             tail_buffer_factor: 1.00, //normally - 1.05,
             frac: 0.1,
             verbose: true
@@ -985,6 +989,7 @@ mod tests {
             max_branch_attempt_length: 10000,
             branch_limit_factor: 4.0,
             branch_buffer_factor: 1.3,
+            midpoint_ed_factor: 0.4,
             tail_buffer_factor: 1.00, //normally - 1.05,
             frac: 0.1,
             verbose: true

@@ -117,6 +117,8 @@ fn main() {
         max_branch_attempt_length: 10000,
         branch_limit_factor: branch_factor,
         branch_buffer_factor: 1.3,
+        //TODO: make this 0.4 a CLI param? we did a prelim test with 0.3 and prec/recall went up but total indels/subs went up *shrug*
+        midpoint_ed_factor: 0.4,
         tail_buffer_factor: 1.05,
         frac: min_frac,
         verbose: verbose_mode
