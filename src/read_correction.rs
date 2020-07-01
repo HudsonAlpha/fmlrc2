@@ -2,7 +2,7 @@
 extern crate log;
 
 use std::sync::Arc;
-use triple_accel::{levenshtein,levenshtein_search,Match};
+use triple_accel::{levenshtein_exp,levenshtein_search,Match};
 
 use crate::bv_bwt::BitVectorBWT;
 use crate::stats_util;
@@ -209,8 +209,8 @@ pub fn correction_pass(bwt: &BitVectorBWT, seq_i: &[u8], params: &CorrectionPara
                             seq: bm
                         };
                         corrections_list.push(new_corr);
-                    } else {
-                        //no bridges were found, try to extend into the midpoint
+                    } else if x - prev_found as usize > kmer_size {
+                        //no bridges were found, try to extend into the midpoint (assuming no seed/target overlap)
                         let mid_point: usize = (prev_found as usize+x+kmer_size) / 2;
                         max_branch_length = (params.tail_buffer_factor*(mid_point - prev_found as usize) as f64) as usize;
                         let max_edit_distance: u32 = ((mid_point - prev_found as usize) as f64 * params.midpoint_ed_factor) as u32;
@@ -283,7 +283,6 @@ pub fn correction_pass(bwt: &BitVectorBWT, seq_i: &[u8], params: &CorrectionPara
             corrected_seq.truncate(corrected_seq.len() - (current_position - correction.start_pos));
         }
         else {
-            //TODO: is there a better way than extend_from_slice?
             //copy everything up to the correction
             corrected_seq.extend_from_slice(&seq_i[current_position..correction.start_pos]);
         }
@@ -412,7 +411,7 @@ fn pick_best_levenshtein(original: &[u8], candidates: Vec<Vec<u8>>, bwt: &BitVec
         let mut ed_scores: Vec<u32> = Vec::<u32>::with_capacity(candidates.len());
         for candidate in candidates.iter() {
             //calculate the min distance
-            let score: u32 = levenshtein(&original, &candidate);
+            let score: u32 = levenshtein_exp(&original, &candidate);
             ed_scores.push(score);
         }
         let min_score: u32 = *ed_scores.iter().min().unwrap();
@@ -430,6 +429,7 @@ fn pick_best_levenshtein(original: &[u8], candidates: Vec<Vec<u8>>, bwt: &BitVec
             Some(candidates_ed.remove(0))
         }
         else {
+            //TODO: is pileup or random better here?
             //figure out which of the ones with equal edit distance has the most counts
             let mut max_counts: u64 = 0;
             let mut max_id: usize = 0;
@@ -471,6 +471,8 @@ pub fn bridge_kmers(
     let kmer_len = seed_kmer.len();
     assert_eq!(kmer_len, target_kmer.len());
     let mut counts: [u64; VALID_CHARS_LEN] = [0; VALID_CHARS_LEN];
+    let mut fw_counts: [u64; VALID_CHARS_LEN] = [0; VALID_CHARS_LEN];
+    let mut rev_counts: [u64; VALID_CHARS_LEN] = [0; VALID_CHARS_LEN];
     let mut num_branched: usize = 0;
     let mut max_pos: usize;
 
@@ -502,13 +504,17 @@ pub fn bridge_kmers(
             curr_offset += 1;
             
             //do all the k-mer counting, efficient on rev-comp, then forward queries are added in
-            bwt.prefix_revkmer_noalloc_fixed(&rev_buffer[curr_offset..curr_offset+kmer_len-1], &mut counts);
+            bwt.prefix_revkmer_noalloc_fixed(&rev_buffer[curr_offset..curr_offset+kmer_len-1], &mut rev_counts);
+            
+            //parallel forward query, doesn't seem to gain much if anything
+            bwt.postfix_kmer_noalloc_fixed(&curr_buffer[curr_offset..curr_offset+kmer_len-1], &mut fw_counts);
             
             max_pos=0;
             for x in 0..VALID_CHARS_LEN {
                 //change the last symbol, then do the counts    
-                curr_buffer[curr_offset+kmer_len-1] = VALID_CHARS[x];
-                counts[x] += bwt.count_kmer(&curr_buffer[curr_offset..curr_offset+kmer_len]);
+                //curr_buffer[curr_offset+kmer_len-1] = VALID_CHARS[x];
+                //counts[x] += bwt.count_kmer(&curr_buffer[curr_offset..curr_offset+kmer_len]);
+                counts[x] = fw_counts[x] + rev_counts[x];
                 if counts[x] > counts[max_pos] {
                     max_pos = x;
                 }
@@ -573,12 +579,14 @@ pub fn assemble_from_kmer(
     //build some helper values we'll be looping through a lot
     let kmer_len = seed_kmer.len();
     let mut counts: [u64; VALID_CHARS_LEN] = [0; VALID_CHARS_LEN];
+    let mut fw_counts: [u64; VALID_CHARS_LEN] = [0; VALID_CHARS_LEN];
+    let mut rev_counts: [u64; VALID_CHARS_LEN] = [0; VALID_CHARS_LEN];
     let mut num_branched: usize = 0;
     let mut max_pos: usize;
 
-    //the queries will populates these vectors
-    let mut curr_kmer: Vec<u8> = vec![4; kmer_len];
-    let mut rev_kmer: Vec<u8> = vec![4; kmer_len];
+    //these buffers are used to create query slices
+    let mut curr_buffer: Vec<u8> = vec![4; max_branch_len];
+    let mut rev_buffer: Vec<u8> = vec![4; max_branch_len];
 
     //initialize the bridging with our seed k-mer
     let mut possible_bridges: Vec<Vec<u8>> = Vec::<Vec<u8>>::new();
@@ -590,27 +598,29 @@ pub fn assemble_from_kmer(
         //get a bridge to extend
         let mut curr_bridge: Vec<u8> = possible_bridges.pop().unwrap();
         let mut curr_bridge_len = curr_bridge.len();
+        let mut curr_offset: usize = 0;
         num_branched += 1;
 
-        //TODO: replace this with copy slice and call to string_util::reverse_complement_i?
+        //TODO: replace this with copy slice? not sure how to do the rev comp in a one-line
         for x in 0..kmer_len {
-            curr_kmer[x] = curr_bridge[curr_bridge_len-kmer_len+x];
-            rev_kmer[kmer_len-x-1] = string_util::COMPLEMENT_INT[curr_kmer[x] as usize];
+            curr_buffer[x] = curr_bridge[curr_bridge_len-kmer_len+x];
+            rev_buffer[x] = string_util::COMPLEMENT_INT[curr_buffer[x] as usize];
         }
 
         while curr_bridge_len < max_branch_len {
-            //shift the current k-mer over one in preparation for the last base toggle
-            for x in 0..kmer_len-1 {
-                curr_kmer[x] = curr_kmer[x+1];
-                rev_kmer[kmer_len-x-1] = rev_kmer[kmer_len-x-2];
-            }
+            //increment the offset
+            curr_offset += 1;
+
+            //do all the k-mer counting, efficient on rev-comp, then forward queries are added in
+            bwt.prefix_revkmer_noalloc_fixed(&rev_buffer[curr_offset..curr_offset+kmer_len-1], &mut rev_counts);
             
-            //do all the k-mer counting
-            max_pos = 0;
+            //parallel forward query, not much faster but there is some gain
+            bwt.postfix_kmer_noalloc_fixed(&curr_buffer[curr_offset..curr_offset+kmer_len-1], &mut fw_counts);
+            
+            max_pos=0;
             for x in 0..VALID_CHARS_LEN {
-                curr_kmer[kmer_len-1] = VALID_CHARS[x];
-                rev_kmer[0] = string_util::COMPLEMENT_INT[VALID_CHARS[x] as usize];
-                counts[x] = bwt.count_kmer(&curr_kmer) + bwt.count_kmer(&rev_kmer);
+                //change the last symbol, then do the counts    
+                counts[x] = fw_counts[x] + rev_counts[x];
                 if counts[x] > counts[max_pos] {
                     max_pos = x;
                 }
@@ -640,9 +650,9 @@ pub fn assemble_from_kmer(
             curr_bridge[curr_bridge_len] = VALID_CHARS[max_pos];
             curr_bridge_len += 1;
             
-            //update k-mers
-            curr_kmer[kmer_len-1] = VALID_CHARS[max_pos];
-            rev_kmer[0] = string_util::COMPLEMENT_INT[VALID_CHARS[max_pos] as usize];
+            //extend k-mer buffers with the best character
+            curr_buffer[curr_offset+kmer_len-1] = VALID_CHARS[max_pos];
+            rev_buffer[curr_offset+kmer_len-1] = string_util::COMPLEMENT_INT[VALID_CHARS[max_pos] as usize];
         }
 
         //TODO: we should revisit this requirement to be as long as the max_branch_len, maybe add a min_branch_len?
@@ -814,7 +824,7 @@ mod tests {
         let long_seq = convert_stoi(&"AACGGATCATAGCTTACCAGTATATACGT"); //one insert, one change
 
         //use this one when we want to compare the full strings and get an edit distance
-        let l_dist = levenshtein(&long_seq, &query);
+        let l_dist = levenshtein_exp(&long_seq, &query);
         assert_eq!(l_dist, 2);
 
         //use this one when we need to do minimal head/tail corrections
