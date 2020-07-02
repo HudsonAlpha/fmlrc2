@@ -100,6 +100,7 @@ fn main() {
         error!("--begin_index set to value larger than --end_index");
         std::process::exit(exitcode::DATAERR);
     }
+    kmer_sizes.sort();
     info!("\tk-mer sizes: {:?}", kmer_sizes);
     info!("\tabs. mininimum count: {}", min_count);
     info!("\tdyn. minimimum fraction: {}", min_frac);
