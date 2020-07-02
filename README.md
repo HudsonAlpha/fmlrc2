@@ -22,7 +22,7 @@ cargo build --release
 ### MSBWT Building
 The Multi-String Burrows Wheeler Transform (MSBWT or BWT) must be build prior to read correction. FMLRC v2 uses the same data structure as v1, so the [original instructions](https://github.com/holtjma/fmlrc#building-the-short-read-bwt) can be used.
 
-Given a FASTQ file of accurate reads (`reads.fq.gz`), you can also use the following command from this crate to create a BWT at `comp_msbwt.npy`:
+Given a FASTQ file of accurate reads (`reads.fq.gz`), you can also use the following command from this crate to create a BWT at `comp_msbwt.npy`.  Note that this command requires the [ropebwt2](https://github.com/lh3/ropebwt2) executable to be installed:
 ```
 gunzip -c reads.fq.gz | \
     awk 'NR % 4 == 2' | \
