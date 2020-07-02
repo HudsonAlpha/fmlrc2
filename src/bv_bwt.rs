@@ -11,6 +11,11 @@ use crate::string_util;
 
 const ZERO_COUNT_VEC: [u64; 256] = [0; 256];
 
+// sweet spot seems to be 8, providing a definitely speed boost while using ~25MB,
+// so negligible overhead compared to FMLRC as a whole
+// 9 is ~153MB, and 10 is ~922MB; 9 does offer a boost, but I'd be hesistant to use >=10 due to mem reqs
+pub const DEFAULT_CACHE_K: usize = 8; 
+
 /// Structure that contains a bit vector-based BWT+FM-index implementation
 pub struct BitVectorBWT {
     bwt: Vec<u8>,
@@ -19,10 +24,14 @@ pub struct BitVectorBWT {
     total_counts: [u64; VC_LEN],
     start_index: [u64; VC_LEN],
     end_index: [u64; VC_LEN],
-    total_size: u64
+    total_size: u64,
+    fixed_init: [BWTRange; 4],
+    cache_k: usize,
+    kmer_cache: Vec<BWTRange>
 }
 
 /// Basic struct for containing a range in a BWT
+#[derive(Clone,Copy,Default,Debug,Eq,PartialEq)]
 pub struct BWTRange {
     /// the lower bound, inclusive
     l: u64,
@@ -44,7 +53,10 @@ impl Default for BitVectorBWT {
             total_counts: [0; VC_LEN],
             start_index: [0; VC_LEN],
             end_index: [0; VC_LEN],
-            total_size: 0
+            total_size: 0,
+            fixed_init: [Default::default(); 4],
+            cache_k: DEFAULT_CACHE_K,
+            kmer_cache: Vec::<BWTRange>::new()
         }
     }
 }
@@ -61,6 +73,25 @@ impl BitVectorBWT {
     /// ```
     pub fn new() -> Self {
         Default::default()
+    }
+
+    /// Allocation function for the BWT with a setting for cache k-mer length.
+    /// If using `new()`, the default cache uses `k=8` which leads to ~25MB of cache size.
+    /// Each integer increment of `k` increases the cache size 6-fold, but also generally improves runtime.
+    /// If memory is not a major issue, using `k=10` can provide a noticeable speedup while maintaining a cache size <1GB.
+    /// Due to the minimal size of the 8-mer cache, we do not recommend using <8 as that will likely only cause a performance hit.
+    /// # Arguments
+    /// * `cache_k` - sets the k-mer size used in the cache (default is 8)
+    /// # Examples
+    /// ```rust
+    /// // creates a BWT with ~1GB of memory used for caching
+    /// use fmlrc::bv_bwt::BitVectorBWT;
+    /// let mut bwt: BitVectorBWT = BitVectorBWT::with_cache_size(10);
+    /// ```
+    pub fn with_cache_size(cache_k: usize) -> Self {
+        let mut ret: BitVectorBWT = Default::default();
+        ret.cache_k = cache_k;
+        ret
     }
 
     /// Initializes the BWT from a compressed BWT vector.
@@ -140,6 +171,20 @@ impl BitVectorBWT {
 
         //now we can construct the FM-index pieces in the binary storage format for rapid speed
         self.construct_fmindex(false);
+
+        //now do the fixed initialization
+        let full_range: BWTRange = BWTRange {
+            l: 0,
+            h: self.total_size
+        };
+        unsafe {
+            self.fixed_init[0] = self.constrain_range(1, &full_range);
+            self.fixed_init[1] = self.constrain_range(2, &full_range);
+            self.fixed_init[2] = self.constrain_range(3, &full_range);
+            self.fixed_init[3] = self.constrain_range(5, &full_range);
+        }
+
+        self.populate_cache(false);
 
         info!("Finished BWT initialization.");
     }
@@ -246,6 +291,86 @@ impl BitVectorBWT {
         }
     }
 
+    /// This will pull the full cache index for a single in-order k-mer (i.e. forward order)
+    #[inline]
+    fn get_cache_index(&self, arr: &[u8]) -> usize {
+        assert!(arr.len() >= self.cache_k);
+        let mut ret: usize = 0;
+        for i in 0..self.cache_k {
+            ret *= VC_LEN;
+            ret += arr[i] as usize;
+        }
+        ret
+    }
+
+    /// This will pull the full cache index for a single reversed k-mer
+    #[inline]
+    fn get_rev_cache_index(&self, arr: &[u8]) -> usize {
+        assert!(arr.len() >= self.cache_k);
+        let mut ret: usize = 0;
+        for i in (0..self.cache_k).rev() {
+            ret *= VC_LEN;
+            ret += arr[i] as usize;
+        }
+        ret
+    }
+
+    /// This will pull all fixed extensions `c` for (k-1)-mer K, getting 4 cache keys `Kc`
+    #[inline]
+    fn get_fixed_cache_index(&self, arr: &[u8]) -> [usize; 4] {
+        assert!(arr.len() >= self.cache_k-1);
+        let mut initial_value: usize = 0;
+        for i in 0..self.cache_k-1 {
+            initial_value *= VC_LEN;
+            initial_value += arr[i] as usize;
+        }
+        let mut ret: [usize; 4] = [initial_value; 4];
+        for i in 0..4 {
+            ret[i] *= VC_LEN;
+        }
+        ret[0] += 1;
+        ret[1] += 2;
+        ret[2] += 3;
+        ret[3] += 5;
+        ret
+    }
+
+    /// This will pre-build a cache of all k-mers of length `cache_k`.
+    /// If `store_dollar` is set, it will build all k-mers with the `$` character also.
+    /// Only needs to be called once after indexing is complete.
+    /// # Arguments
+    /// * `store_dollar` - if true, create cache entries for the k-mers with `$` characters
+    fn populate_cache(&mut self, store_dollar: bool) {
+        info!("Building {:?}-mer cache...", self.cache_k);
+        let initial_value: u8 = if store_dollar {0} else {1};
+        //let mut current_key: [u8; self.cache_k] = [initial_value; self.cache_k];
+        let mut current_key: Vec<u8> = vec![initial_value; self.cache_k];
+        let mut cache_index: usize;
+        let mut ck_ind: usize;
+        //let final_key: [u8; self.cache_k] = [5; self.cache_k];
+        let final_key: Vec<u8> = vec![5; self.cache_k];
+        self.kmer_cache = vec![Default::default(); VC_LEN.pow(self.cache_k as u32)];
+        loop {
+            //set the cache
+            cache_index = self.get_cache_index(&current_key);
+            self.kmer_cache[cache_index] = self.range_kmer(&current_key);
+            
+            //check if we're at the final key
+            if current_key == final_key {
+                break;
+            }
+
+            //increment our current_key
+            ck_ind = self.cache_k - 1;
+            current_key[ck_ind] += 1;
+            while current_key[ck_ind] == 6 {
+                current_key[ck_ind-1] += 1;
+                current_key[ck_ind] = initial_value;
+                ck_ind -= 1;
+            }
+        }
+    }
+
     /// Returns the total number of occurences of a given symbol
     /// # Arguments
     /// * `symbol` - the symbol in integer form
@@ -299,13 +424,23 @@ impl BitVectorBWT {
     #[inline]
     pub fn count_kmer(&self, kmer: &[u8]) -> u64 {
         //init to everything
-        let mut ret: BWTRange = BWTRange {
-            l: 0,
-            h: self.total_size
-        };
+        let mut ret: BWTRange;
+        let cut_kmer: &[u8];
         
-        //TODO: test if this is the fastest way to do this loop (with internal break & such)
-        for c in kmer.iter().rev() {
+        //check for cache entry
+        if kmer.len() >= self.cache_k {
+            ret = self.kmer_cache[self.get_cache_index(&kmer[kmer.len()-self.cache_k..])];
+            cut_kmer = &kmer[..kmer.len()-self.cache_k];
+        } else {
+            cut_kmer = kmer;
+            ret = BWTRange {
+                l: 0,
+                h: self.total_size
+            };
+        }
+        
+        //go through what remains in reverse
+        for c in cut_kmer.iter().rev() {
             assert!(*c < VC_LEN as u8);
             unsafe {
                 ret = self.constrain_range(*c, &ret);
@@ -317,6 +452,25 @@ impl BitVectorBWT {
 
         //return the delta
         ret.h-ret.l
+    }
+
+    /// This function is only used to initially build up the k-mer cache
+    #[inline]
+    fn range_kmer(&self, kmer: &[u8]) -> BWTRange {
+        //init to everything
+        let mut ret: BWTRange = BWTRange {
+            l: 0,
+            h: self.total_size
+        };
+        
+        //must do full k-mer since cache doesn't exist yet
+        for c in kmer.iter().rev() {
+            assert!(*c < VC_LEN as u8);
+            unsafe {
+                ret = self.constrain_range(*c, &ret);
+            }
+        }
+        ret
     }
 
     /// Returns the total number of occurrences of each given symbol before a given k-mer in the BWT.
@@ -349,7 +503,7 @@ impl BitVectorBWT {
     /// Functionally, for a k-mer `K` and a symbol set `C`, this is identical to calculating the occurence of `cK`
     /// for each `c` in `C`. This function reduces the work by re-using the shared components of the calculation.
     /// This function does not allocate a count array, but populates the passed in value instead.
-    /// Returns `true` if any values are greater than 0, otherwise `false`.
+    /// Returns `false` if it short circuits, otherwise `true`.
     /// # Arguments
     /// * `kmer` - the integer-encoded kmer sequence to count
     /// * `symbols` - the integer-encoded symbols to pre-pend to the k-mer and count.
@@ -371,13 +525,23 @@ impl BitVectorBWT {
     #[inline]
     pub fn prefix_kmer_noalloc(&self, kmer: &[u8], symbols: &[u8], counts: &mut [u64]) -> bool {
         //init to everything
-        let mut ret: BWTRange = BWTRange {
-            l: 0,
-            h: self.total_size
-        };
+        let mut ret: BWTRange;
+        let cut_kmer: &[u8];
         
-        //TODO: test if this is the fastest way to do this loop (with internal break & such)
-        for c in kmer.iter().rev() {
+        //check for cache results
+        if kmer.len() >= self.cache_k {
+            ret = self.kmer_cache[self.get_cache_index(&kmer[kmer.len()-self.cache_k..])];
+            cut_kmer = &kmer[..kmer.len()-self.cache_k];
+        } else {
+            ret = BWTRange {
+                l: 0,
+                h: self.total_size
+            };
+            cut_kmer = kmer;
+        }
+        
+        //go through remaining sequence in reverse order
+        for c in cut_kmer.iter().rev() {
             assert!(*c < VC_LEN as u8);
             unsafe {
                 ret = self.constrain_range(*c, &ret);
@@ -387,6 +551,8 @@ impl BitVectorBWT {
                 return false;
             }
         }
+
+        //pre-pend the passed symbols as final counts
         for (i, c) in symbols.iter().enumerate() {
             assert!(*c < VC_LEN as u8);
             let subrange = unsafe { self.constrain_range(*c, &ret) };
@@ -401,6 +567,7 @@ impl BitVectorBWT {
     /// Given a k-mer `K`, the results counts array will contain the number of occurences of: `[T+rev(K), G+rev(K), C+rev(K), A+rev(K)]`.
     /// In fmlrc, this is then added to forward counts for the rev-comp sequences to obtain total counts.
     /// This function is counter-intuitive, but efficient; make sure you understand it before use.
+    /// Returns `false` if it short circuits, otherwise `true`.
     /// # Arguments
     /// * `rev_kmer` - a k-mer sequence that will be traversed in the forward direction for counting (normal k-mer counting is from end to start)
     /// * `counts` - a mutable array that will be populated with counts for (k+1)-mers `[T+rev(K), G+rev(K), C+rev(K), A+rev(K)]`
@@ -422,13 +589,24 @@ impl BitVectorBWT {
     pub fn prefix_revkmer_noalloc_fixed(&self, rev_kmer: &[u8], counts: &mut [u64]) -> bool {
         //init to everything
         assert!(counts.len() >= 4);
-        let mut ret: BWTRange = BWTRange {
-            l: 0,
-            h: self.total_size
-        };
-        
+        let mut ret: BWTRange;
+        let cut_kmer: &[u8];
+
+        //check cache
+        if rev_kmer.len() >= self.cache_k {
+            let cache_index: usize = self.get_rev_cache_index(&rev_kmer);
+            ret = self.kmer_cache[cache_index];
+            cut_kmer = &rev_kmer[self.cache_k..];
+        } else {
+            ret = BWTRange {
+                l: 0,
+                h: self.total_size
+            };
+            cut_kmer = rev_kmer;
+        }
+
         //iterate forward
-        for c in rev_kmer.iter() {
+        for c in cut_kmer.iter() {
             assert!(*c < VC_LEN as u8);
             unsafe {
                 ret = self.constrain_range(*c, &ret);
@@ -451,6 +629,67 @@ impl BitVectorBWT {
         counts[2] = subrange.h-subrange.l;
         let subrange = unsafe { self.constrain_range(1, &ret) };
         counts[3] = subrange.h-subrange.l;
+        true
+    }
+
+    /// This is a specialty function for fmlrc that accepts a k-mer sequence along with a mutable counts array. 
+    /// It will then calculate the counts for that k-mer sequence with each postfix [A, C, G, T].
+    /// Given a k-mer `K`, the results counts array will contain the number of occurences of (k+1)-mers: `[KA, KC, KG, KT]`.
+    /// In fmlrc, this is then added to reverse-complemented counts to obtain total counts.
+    /// Returns `false` if it short circuits, otherwise `true`.
+    /// # Arguments
+    /// * `kmer` - a k-mer sequence, `K`
+    /// * `counts` - a mutable array that will be populated with counts for (k+1)-mers `[KA, KC, KG, KT]`
+    /// # Examples
+    /// ```rust
+    /// # use std::io::Cursor;
+    /// # use fmlrc::bv_bwt::BitVectorBWT;
+    /// # use fmlrc::bwt_converter::convert_to_vec;
+    /// # let seq = "TG$$CAGCCG";
+    /// # let seq = Cursor::new(seq);
+    /// # let vec = convert_to_vec(seq);
+    /// # let mut bwt = BitVectorBWT::new();
+    /// # bwt.load_vector(vec);
+    /// let mut kmer_counts = vec![0; 4];
+    /// bwt.postfix_kmer_noalloc_fixed(&vec![2, 3], &mut kmer_counts[..]); //count CGX
+    /// assert_eq!(kmer_counts, vec![0, 0, 1, 1]); //the set has one occurrence each of CGG and CGT
+    /// ```
+    #[inline]
+    pub fn postfix_kmer_noalloc_fixed(&self, kmer: &[u8], counts: &mut [u64]) -> bool {
+        //init to everything
+        assert!(counts.len() >= 4);
+        let mut ranges: [BWTRange; 4];
+        let cut_kmer: &[u8];
+        if kmer.len() >= self.cache_k {
+            let cache_indices: [usize; 4] = self.get_fixed_cache_index(&kmer[kmer.len()-self.cache_k+1..]);
+            ranges = [
+                self.kmer_cache[cache_indices[0]],
+                self.kmer_cache[cache_indices[1]],
+                self.kmer_cache[cache_indices[2]],
+                self.kmer_cache[cache_indices[3]]
+            ];
+            cut_kmer = &kmer[0..kmer.len()-self.cache_k+1];
+        } else {
+            ranges = self.fixed_init.clone();
+            cut_kmer = kmer;
+        }
+
+        //go through whatever remains in reverse; single iterator with checks is fastest
+        for c in cut_kmer.iter().rev() {
+            assert!(*c < VC_LEN as u8);
+            unsafe {
+                for x in 0..4 {
+                    if ranges[x].l != ranges[x].h {
+                        ranges[x] = self.constrain_range(*c, &ranges[x]);
+                    }
+                }
+            }
+        }
+        
+        //store the deltas
+        for x in 0..4 {
+            counts[x] = ranges[x].h - ranges[x].l;
+        }
         true
     }
 
@@ -528,6 +767,12 @@ mod tests {
             }
         }
 
+        //make sure the fixed inits are correct
+        assert_eq!(bwt.fixed_init[0], BWTRange {l:expected_starts[1], h:expected_ends[1]});
+        assert_eq!(bwt.fixed_init[1], BWTRange {l:expected_starts[2], h:expected_ends[2]});
+        assert_eq!(bwt.fixed_init[2], BWTRange {l:expected_starts[3], h:expected_ends[3]});
+        assert_eq!(bwt.fixed_init[3], BWTRange {l:expected_starts[5], h:expected_ends[5]});
+
         //original strings "ACGT\nCCGG"
         //2-mers
         assert_eq!(bwt.count_kmer(&vec![1, 2]), 1); //AC
@@ -553,6 +798,23 @@ mod tests {
         assert_eq!(bwt.prefix_kmer(&vec![2], &vec![1, 2, 3, 5]), vec![1, 1, 0, 0]); //XC
         assert_eq!(bwt.prefix_kmer(&vec![2, 3], &vec![1, 2, 3, 5]), vec![1, 1, 0, 0]); //XCG
         assert_eq!(bwt.prefix_kmer(&vec![5, 5, 5, 5], &vec![1, 2, 3, 5]), vec![0, 0, 0, 0]); //XTTTT - absent
+
+        //prefix counts
+        let mut counts: Vec<u64> = vec![0, 0, 0, 0];
+        assert_eq!(bwt.prefix_revkmer_noalloc_fixed(&vec![2], &mut counts), true);
+        assert_eq!(counts, vec![0, 0, 1, 1]);//XC (but rev-comped)
+        assert_eq!(bwt.prefix_revkmer_noalloc_fixed(&vec![3, 2], &mut counts), true);
+        assert_eq!(counts, vec![0, 0, 1, 1]);//XCG (but rev-comped)
+        assert_eq!(bwt.prefix_revkmer_noalloc_fixed(&vec![5, 5, 5, 5], &mut counts), false);
+        assert_eq!(counts, vec![0, 0, 0, 0]);//XTTTT
+        
+        //postfix counts
+        assert_eq!(bwt.postfix_kmer_noalloc_fixed(&vec![2], &mut counts), true);
+        assert_eq!(counts, vec![0, 1, 2, 0]); //CC and CG
+        assert_eq!(bwt.postfix_kmer_noalloc_fixed(&vec![2, 3], &mut counts), true);
+        assert_eq!(counts, vec![0, 0, 1, 1]); //CGG and CGT
+        assert_eq!(bwt.postfix_kmer_noalloc_fixed(&vec![5, 5, 5, 5], &mut counts), true);
+        assert_eq!(counts, vec![0, 0, 0, 0]); //none
     }
 
     #[test]
