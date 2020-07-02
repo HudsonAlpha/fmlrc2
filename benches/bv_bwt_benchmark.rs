@@ -78,6 +78,17 @@ pub fn bench_count_kmer(c: &mut Criterion) {
     }));
 }
 
-//criterion_group!(benches, bench_string_util);
-criterion_group!(benches, bench_count_kmer);
+pub fn bench_fixed_counts(c: &mut Criterion) {
+    let bwt: BitVectorBWT = get_constant_bwt();
+
+    //this is the correct sequence, alter it below
+    let query = convert_stoi(&"AACGGATCAAGCTTACCAGTATTTACGT");
+    let mut counts: Vec<u64> = vec![0; 4];
+
+    c.bench_function("postfix_kmer_noalloc_fixed", |b| b.iter(|| {
+        black_box(bwt.postfix_kmer_noalloc_fixed(&query[..query.len()-1], &mut counts));
+    }));
+}
+
+criterion_group!(benches, bench_string_util, bench_count_kmer, bench_fixed_counts);
 criterion_main!(benches);
