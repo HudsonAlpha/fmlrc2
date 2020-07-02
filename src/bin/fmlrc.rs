@@ -28,6 +28,7 @@ fn main() {
 
     //this is the CLI block, params that get populated appear before
     let mut bwt_fn: String = String::new();
+    let mut cache_size: usize = 8;
     let mut long_read_fn: String = String::new();
     let mut corrected_read_fn: String = String::new();
     let mut kmer_sizes: Vec<usize> = vec![21, 59];
@@ -51,7 +52,8 @@ fn main() {
         ap.refer(&mut min_count).add_option(&["-m", "--min_count"], argparse::Store, "absolute minimum k-mer count to consisder a path (default: 5)");
         ap.refer(&mut min_frac).add_option(&["-f", "--min_dynamic_count"], argparse::Store, "dynamic minimum k-mer count fraction of median to consider a path (default: 0.1)");
         ap.refer(&mut branch_factor).add_option(&["-B", "--branch_factor"], argparse::Store, "branching factor for correction, scaled by k (default: 4.0)");
-        
+        ap.refer(&mut cache_size).add_option(&["-C", "--cache_size"], argparse::Store, "the length of k-mer to precompute in cache (default: 8)");
+
         //main required parameters
         ap.refer(&mut bwt_fn).add_argument("comp_msbwt.npy", argparse::Store, "The compressed BWT file with high accuracy reads").required();
         ap.refer(&mut long_read_fn).add_argument("long_reads.fa", argparse::Store, "The FASTX file with uncorrected reads").required();
@@ -91,6 +93,7 @@ fn main() {
     info!("Execution Parameters:");
     info!("\tverbose: {}", verbose_mode);
     info!("\tthreads: {}", threads);
+    info!("\tcache size: {}", cache_size);
     info!("Correction Parameters:");
     info!("\treads to correct: [{}, {})", begin_id, end_id);
     if begin_id > end_id {
@@ -126,7 +129,7 @@ fn main() {
     let arc_params: Arc<CorrectionParameters> = Arc::new(my_params);
 
     //first load the BWT into memory
-    let mut bwt: BitVectorBWT = BitVectorBWT::new();
+    let mut bwt: BitVectorBWT = BitVectorBWT::with_cache_size(cache_size);
     match bwt.load_numpy_file(&bwt_fn) {
         Ok(_) => {},
         Err(e) => {
