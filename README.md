@@ -33,6 +33,9 @@ gunzip -c reads.fq.gz | \
     fmlrc2-convert comp_msbwt.npy
 ```
 
+#### Optional Construction Speedup
+If you are **only** using the BWT for correction, then the `sort` can be removed from the above command. This will reduce construction time significantly, but loses the read recovery property of the BWT.
+
 ### Correction
 Assuming the accurate-read BWT is built (`comp_msbwt.npy`) and uncorrected reads are available (fastq/fastq, gzip optional, `uncorrected.fq.gz`), invoking FMLRC v2 is fairly simple:
 ```
