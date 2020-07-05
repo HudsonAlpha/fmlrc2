@@ -503,7 +503,6 @@ impl BitVectorBWT {
     /// Functionally, for a k-mer `K` and a symbol set `C`, this is identical to calculating the occurence of `cK`
     /// for each `c` in `C`. This function reduces the work by re-using the shared components of the calculation.
     /// This function does not allocate a count array, but populates the passed in value instead.
-    /// Returns `false` if it short circuits, otherwise `true`.
     /// # Arguments
     /// * `kmer` - the integer-encoded kmer sequence to count
     /// * `symbols` - the integer-encoded symbols to pre-pend to the k-mer and count.
@@ -523,7 +522,7 @@ impl BitVectorBWT {
     /// assert_eq!(kmer_counts, vec![1, 1, 0, 0]); //the set has one occurrence each of ACG and CCG
     /// ```
     #[inline]
-    pub fn prefix_kmer_noalloc(&self, kmer: &[u8], symbols: &[u8], counts: &mut [u64]) -> bool {
+    pub fn prefix_kmer_noalloc(&self, kmer: &[u8], symbols: &[u8], counts: &mut [u64]) {
         //init to everything
         let mut ret: BWTRange;
         let cut_kmer: &[u8];
@@ -548,7 +547,7 @@ impl BitVectorBWT {
             }
             if ret.h == ret.l {
                 counts[0..symbols.len()].clone_from_slice(&ZERO_COUNT_VEC[0..symbols.len()]);
-                return false;
+                return;
             }
         }
 
@@ -558,7 +557,6 @@ impl BitVectorBWT {
             let subrange = unsafe { self.constrain_range(*c, &ret) };
             counts[i] = subrange.h-subrange.l
         }
-        true
     }
 
     /// This is a specialty function for fmlrc that accepts a *reversed* k-mer sequence along with a mutable
@@ -567,7 +565,6 @@ impl BitVectorBWT {
     /// Given a k-mer `K`, the results counts array will contain the number of occurences of: `[T+rev(K), G+rev(K), C+rev(K), A+rev(K)]`.
     /// In fmlrc, this is then added to forward counts for the rev-comp sequences to obtain total counts.
     /// This function is counter-intuitive, but efficient; make sure you understand it before use.
-    /// Returns `false` if it short circuits, otherwise `true`.
     /// # Arguments
     /// * `rev_kmer` - a k-mer sequence that will be traversed in the forward direction for counting (normal k-mer counting is from end to start)
     /// * `counts` - a mutable array that will be populated with counts for (k+1)-mers `[T+rev(K), G+rev(K), C+rev(K), A+rev(K)]`
@@ -586,7 +583,7 @@ impl BitVectorBWT {
     /// assert_eq!(kmer_counts, vec![0, 0, 1, 1]); //the set has one occurrence each of ACG and CCG; so complemented is [0, 0, 1, 1]
     /// ```
     #[inline]
-    pub fn prefix_revkmer_noalloc_fixed(&self, rev_kmer: &[u8], counts: &mut [u64]) -> bool {
+    pub fn prefix_revkmer_noalloc_fixed(&self, rev_kmer: &[u8], counts: &mut [u64]) {
         //init to everything
         assert!(counts.len() >= 4);
         let mut ret: BWTRange;
@@ -617,7 +614,7 @@ impl BitVectorBWT {
                 counts[1] = 0;
                 counts[2] = 0;
                 counts[3] = 0;
-                return false;
+                return;
             }
         }
         //reverse complemented, so T G C A
@@ -629,14 +626,12 @@ impl BitVectorBWT {
         counts[2] = subrange.h-subrange.l;
         let subrange = unsafe { self.constrain_range(1, &ret) };
         counts[3] = subrange.h-subrange.l;
-        true
     }
 
     /// This is a specialty function for fmlrc that accepts a k-mer sequence along with a mutable counts array. 
     /// It will then calculate the counts for that k-mer sequence with each postfix [A, C, G, T].
     /// Given a k-mer `K`, the results counts array will contain the number of occurences of (k+1)-mers: `[KA, KC, KG, KT]`.
     /// In fmlrc, this is then added to reverse-complemented counts to obtain total counts.
-    /// Returns `false` if it short circuits, otherwise `true`.
     /// # Arguments
     /// * `kmer` - a k-mer sequence, `K`
     /// * `counts` - a mutable array that will be populated with counts for (k+1)-mers `[KA, KC, KG, KT]`
@@ -655,7 +650,7 @@ impl BitVectorBWT {
     /// assert_eq!(kmer_counts, vec![0, 0, 1, 1]); //the set has one occurrence each of CGG and CGT
     /// ```
     #[inline]
-    pub fn postfix_kmer_noalloc_fixed(&self, kmer: &[u8], counts: &mut [u64]) -> bool {
+    pub fn postfix_kmer_noalloc_fixed(&self, kmer: &[u8], counts: &mut [u64]) {
         //init to everything
         assert!(counts.len() >= 4);
         let mut ranges: [BWTRange; 4];
@@ -690,7 +685,6 @@ impl BitVectorBWT {
         for x in 0..4 {
             counts[x] = ranges[x].h - ranges[x].l;
         }
-        true
     }
 
     /// Returns the counts for all k-mers in a given sequence as a Vec<u64>. This function looks at both forward and
@@ -801,19 +795,19 @@ mod tests {
 
         //prefix counts
         let mut counts: Vec<u64> = vec![0, 0, 0, 0];
-        assert_eq!(bwt.prefix_revkmer_noalloc_fixed(&vec![2], &mut counts), true);
+        bwt.prefix_revkmer_noalloc_fixed(&vec![2], &mut counts);
         assert_eq!(counts, vec![0, 0, 1, 1]);//XC (but rev-comped)
-        assert_eq!(bwt.prefix_revkmer_noalloc_fixed(&vec![3, 2], &mut counts), true);
+        bwt.prefix_revkmer_noalloc_fixed(&vec![3, 2], &mut counts);
         assert_eq!(counts, vec![0, 0, 1, 1]);//XCG (but rev-comped)
-        assert_eq!(bwt.prefix_revkmer_noalloc_fixed(&vec![5, 5, 5, 5], &mut counts), false);
+        bwt.prefix_revkmer_noalloc_fixed(&vec![5, 5, 5, 5], &mut counts);
         assert_eq!(counts, vec![0, 0, 0, 0]);//XTTTT
         
         //postfix counts
-        assert_eq!(bwt.postfix_kmer_noalloc_fixed(&vec![2], &mut counts), true);
+        bwt.postfix_kmer_noalloc_fixed(&vec![2], &mut counts);
         assert_eq!(counts, vec![0, 1, 2, 0]); //CC and CG
-        assert_eq!(bwt.postfix_kmer_noalloc_fixed(&vec![2, 3], &mut counts), true);
+        bwt.postfix_kmer_noalloc_fixed(&vec![2, 3], &mut counts);
         assert_eq!(counts, vec![0, 0, 1, 1]); //CGG and CGT
-        assert_eq!(bwt.postfix_kmer_noalloc_fixed(&vec![5, 5, 5, 5], &mut counts), true);
+        bwt.postfix_kmer_noalloc_fixed(&vec![5, 5, 5, 5], &mut counts);
         assert_eq!(counts, vec![0, 0, 0, 0]); //none
     }
 
