@@ -59,6 +59,26 @@ Currently, only uncompressed FASTA is supported for output reads.
 5. SIMD accelerated alignment - thanks to [triple_accel](https://crates.io/crates/triple_accel), the correction alignment step can be accelerated with SIMD instructions when available
 6. Unit testing - FMLRC v2 has unit testing through the standard Rust testing framework (i.e. `cargo test`)
 
+## Benchmarks
+Thus far, all benchmarks have focused on a relatively small _E. coli_ dataset for verifying correctness.
+The files for this dataset can be found in the original [fmlrc example](https://github.com/holtjma/fmlrc/blob/master/example/run_example.sh).
+The exact same BWT and uncorrected long read files were used for both fmlrc v1 and fmlrc v2.
+[ELECTOR](https://github.com/kamimrcht/ELECTOR) was used to evaluate the results.
+All fmlrc executions were run on a Macbook Pro with 2.2 GHz Intel Core i7 processor (8 cores) with 16 GB of RAM.
+Run times were gathered using Mac OSX `time`.
+
+The following table summarizes the results. 
+The actual corrections are _nearly_ identical (there are slight differences not reflected in summary metrics).
+However, FMLRC v2 runs in less than half the time from both real time and CPU time perspectives. 
+While not explicitly measured, FMLRC v2 does use ~1GB of extra memory due to the 10-mer cache (`-C 10`).
+
+| Metric | FMLRC v1 | FMLRC v2 (`-C 10`) |
+| - | - | - |
+| Recall | 0.9825 | 0.9825 |
+| Precision | 0.9815 | 0.9815 |
+| Real time | 7m29.908s | **3m27.428s** |
+| CPU time | 51m34.704s | **22m24.359s** |
+
 ## Reference
 FMLRC v2 does not currently have a pre-print or paper. If you use FMLRC v2, please cite the FMLRC v1 paper:
 
