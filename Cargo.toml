@@ -4,6 +4,11 @@ version = "2.0.0"
 authors = ["holtjma <jholt@hudsonalpha.org>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
+description = "FM-index Long Read Corrector - Rust implementation"
+homepage = "https://github.com/HudsonAlpha/rust-fmlrc"
+repository = "https://github.com/HudsonAlpha/rust-fmlrc"
+# documentation - auto-linked
+readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
