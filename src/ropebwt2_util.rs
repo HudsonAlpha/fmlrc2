@@ -9,6 +9,7 @@ use subprocess::{Exec, Redirection};
 /// Wrapper function for using ropebwt2 with collection of strings.
 /// This is primarily for performing easy tests within the Rust environment.
 /// For production, we recommend running the `ropebwt2` command separately.
+/// **IMPORTANT**: This requires that `ropebwt2` is installed locally and on the `PATH`.
 /// # Arguments
 /// * `data` - a string instance where individual strings are separated by newline characters ('\n')
 /// # Examples
