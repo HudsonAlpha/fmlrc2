@@ -66,6 +66,7 @@ The exact same BWT and uncorrected long read files were used for both fmlrc v1 a
 [ELECTOR](https://github.com/kamimrcht/ELECTOR) was used to evaluate the results.
 All fmlrc executions were run on a Macbook Pro with 2.2 GHz Intel Core i7 processor (8 cores) with 16 GB of RAM.
 Run times were gathered using Mac OSX `time`.
+All parameters were set to defaults except for `-C 10` in FMLRC v2.
 
 The following table summarizes the results. 
 The actual corrections are _nearly_ identical (there are slight differences not reflected in summary metrics).
