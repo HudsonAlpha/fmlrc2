@@ -1,10 +1,11 @@
 
-extern crate argparse;
+extern crate clap;
 extern crate env_logger;
 extern crate exitcode;
 extern crate log;
 extern crate needletail;
 
+use clap::{Arg, App, value_t, values_t};
 use log::{info, error};
 use needletail::parse_sequence_path;
 use std::fs::File;
@@ -24,13 +25,11 @@ fn main() {
     //non-cli parameters
     const JOB_SLOTS: u64 = 10000;
     const UPDATE_INTERVAL: u64 = 10000;
-    let version_string: String = "fmlrc v".to_string()+&VERSION.unwrap_or("?").to_string();
-
+    
     //this is the CLI block, params that get populated appear before
-    let mut bwt_fn: String = String::new();
-    let mut cache_size: usize = 8;
-    let mut long_read_fn: String = String::new();
-    let mut corrected_read_fn: String = String::new();
+    let bwt_fn: String;
+    let long_read_fn: String;
+    let corrected_read_fn: String;
     let mut kmer_sizes: Vec<usize> = vec![21, 59];
     let mut threads: usize = 1;
     let mut begin_id: u64 = 0;
@@ -38,28 +37,87 @@ fn main() {
     let mut min_count: u64 = 5;
     let mut min_frac: f64 = 0.1;
     let mut branch_factor: f64 = 4.0;
-    let mut verbose_mode: bool = false;
-    {
-        let mut ap = argparse::ArgumentParser::new();
-        ap.set_description("FM-index Long Read Corrector - Rust implementation");
-        //optional parameters
-        ap.add_option(&["-v", "--version"], argparse::Print(version_string), "print version number and exit");
-        ap.refer(&mut verbose_mode).add_option(&["-V", "--verbose"], argparse::StoreTrue, "enable verbose output");
-        ap.refer(&mut kmer_sizes).add_option(&["-k", "-K", "--kmer_size"], argparse::Collect, "k-mer sizes for correction, can be specified multiple times (default: \"-k 21 -K 59\")");
-        ap.refer(&mut threads).add_option(&["-t", "--threads"], argparse::Store, "number of correction threads (default: 1)");
-        ap.refer(&mut begin_id).add_option(&["-b", "--begin_index"], argparse::Store, "index of read to start with (default: 0)");
-        ap.refer(&mut end_id).add_option(&["-e", "--end_index"], argparse::Store, "index of read to end with (default: end of file)");
-        ap.refer(&mut min_count).add_option(&["-m", "--min_count"], argparse::Store, "absolute minimum k-mer count to consisder a path (default: 5)");
-        ap.refer(&mut min_frac).add_option(&["-f", "--min_dynamic_count"], argparse::Store, "dynamic minimum k-mer count fraction of median to consider a path (default: 0.1)");
-        ap.refer(&mut branch_factor).add_option(&["-B", "--branch_factor"], argparse::Store, "branching factor for correction, scaled by k (default: 4.0)");
-        ap.refer(&mut cache_size).add_option(&["-C", "--cache_size"], argparse::Store, "the length of k-mer to precompute in cache (default: 8)");
+    let mut cache_size: usize = 8;
+    let verbose_mode: bool;
+    
+    let matches = App::new("FMLRC")
+        .version(VERSION.unwrap_or("?"))
+        .author("J. Matthew Holt <jholt@hudsonalpha.org>")
+        .about("FM-index Long Read Corrector - Rust implementation")
+        .arg(Arg::with_name("verbose_mode")
+            .short("v")
+            .long("verbose")
+            .help("enable verbose output"))
+        .arg(Arg::with_name("kmer_sizes")
+            .short("k")
+            .long("K")
+            .multiple(true)
+            .takes_value(true)
+            .help("k-mer sizes for correction, can be specified multiple times (default: \"-k 21 59\")"))
+        .arg(Arg::with_name("threads")
+            .short("t")
+            .long("threads")
+            .takes_value(true)
+            .help("number of correction threads (default: 1)"))
+        .arg(Arg::with_name("begin_id")
+            .short("b")
+            .long("begin_index")
+            .takes_value(true)
+            .help("index of read to start with (default: 0)"))
+        .arg(Arg::with_name("end_id")
+            .short("e")
+            .long("end_index")
+            .takes_value(true)
+            .help("index of read to end with (default: end of file)"))
+        .arg(Arg::with_name("min_count")
+            .short("m")
+            .long("min_count")
+            .takes_value(true)
+            .help("absolute minimum k-mer count to consisder a path (default: 5)"))
+        .arg(Arg::with_name("min_frac")
+            .short("f")
+            .long("min_dynamic_count")
+            .takes_value(true)
+            .help("dynamic minimum k-mer count fraction of median to consider a path (default: 0.1)"))
+        .arg(Arg::with_name("branch_factor")
+            .short("B")
+            .long("branch_factor")
+            .takes_value(true)
+            .help("branching factor for correction, scaled by k (default: 4.0)"))
+        .arg(Arg::with_name("cache_size")
+            .short("C")
+            .long("cache_size")
+            .takes_value(true)
+            .help("the length of k-mer to precompute in cache (default: 8)"))
+        .arg(Arg::with_name("COMP_MSBWT.NPY")
+            .help("The compressed BWT file with high accuracy reads")
+            .required(true)
+            .index(1))
+        .arg(Arg::with_name("LONG_READS.FA")
+            .help("The FASTX file with uncorrected reads")
+            .required(true)
+            .index(2))
+        .arg(Arg::with_name("CORRECTED_READS.FA")
+            .help("The FASTA file to write corrected reads to")
+            .required(true)
+            .index(3))
+        .get_matches();
+    
+    //pull out required values
+    bwt_fn = matches.value_of("COMP_MSBWT.NPY").unwrap().to_string();
+    long_read_fn = matches.value_of("LONG_READS.FA").unwrap().to_string();
+    corrected_read_fn = matches.value_of("CORRECTED_READS.FA").unwrap().to_string();
 
-        //main required parameters
-        ap.refer(&mut bwt_fn).add_argument("comp_msbwt.npy", argparse::Store, "The compressed BWT file with high accuracy reads").required();
-        ap.refer(&mut long_read_fn).add_argument("long_reads.fa", argparse::Store, "The FASTX file with uncorrected reads").required();
-        ap.refer(&mut corrected_read_fn).add_argument("corrected_reads.fa", argparse::Store, "The FASTA file to write corrected reads to").required();
-        ap.parse_args_or_exit();
-    }
+    //now check options
+    verbose_mode = matches.is_present("verbose_mode");
+    kmer_sizes = values_t!(matches.values_of("kmer_sizes"), usize).unwrap_or(kmer_sizes);
+    threads = value_t!(matches.value_of("threads"), usize).unwrap_or(threads);
+    begin_id = value_t!(matches.value_of("begin_id"), u64).unwrap_or(begin_id);
+    end_id = value_t!(matches.value_of("end_id"), u64).unwrap_or(end_id);
+    min_count = value_t!(matches.value_of("min_count"), u64).unwrap_or(min_count);
+    min_frac = value_t!(matches.value_of("min_frac"), f64).unwrap_or(min_frac);
+    branch_factor = value_t!(matches.value_of("branch_factor"), f64).unwrap_or(branch_factor);
+    cache_size = value_t!(matches.value_of("cache_size"), usize).unwrap_or(cache_size);
 
     info!("Input parameters (required):");
     info!("\tBWT: \"{}\"", bwt_fn);

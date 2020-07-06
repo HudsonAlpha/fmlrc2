@@ -1,8 +1,9 @@
 
-extern crate argparse;
+extern crate clap;
 extern crate env_logger;
 extern crate exitcode;
 
+use clap::{Arg, App, value_t};
 use log::{info, error};
 use std::fs::File;
 use std::io;
@@ -15,23 +16,30 @@ fn main() {
     //initialize logging for our benefit later
     env_logger::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
-    //non-cli parameters
-    let version_string: String = "fmlrc-convert v".to_string()+&VERSION.unwrap_or("?").to_string();
-
     //this is the CLI block, params that get populated appear before
     let mut in_fn: String = "stdin".to_string();
-    let mut bwt_fn: String = String::new();
-    {
-        let mut ap = argparse::ArgumentParser::new();
-        ap.set_description("FM-index Long Read Corrector - Rust implementation");
-        //optional parameters
-        ap.add_option(&["-v", "--version"], argparse::Print(version_string), "print version number and exit");
-        ap.refer(&mut in_fn).add_option(&["-i", "--input"], argparse::Store, "The raw BWT (default: stdin)");
-        
-        //main required parameters
-        ap.refer(&mut bwt_fn).add_argument("comp_msbwt.npy", argparse::Store, "The location to store the compressed BWT").required();
-        ap.parse_args_or_exit();
-    }
+    let bwt_fn: String;
+
+    let matches = App::new("FMLRC BWT Converter")
+        .version(VERSION.unwrap_or("?"))
+        .author("J. Matthew Holt <jholt@hudsonalpha.org>")
+        .about("FMLCR BWT Converter - Rust implementation")
+        .arg(Arg::with_name("in_fn")
+            .short("i")
+            .long("--input")
+            .takes_value(true)
+            .help("The raw BWT (default: stdin)"))
+        .arg(Arg::with_name("COMP_MSBWT.NPY")
+            .help("The location to store the compressed BWT")
+            .required(true)
+            .index(1))
+        .get_matches();
+    
+    //pull out required values
+    bwt_fn = matches.value_of("COMP_MSBWT.NPY").unwrap().to_string();
+    
+    //optional values
+    in_fn = value_t!(matches.value_of("in_fn"), String).unwrap_or(in_fn);
 
     info!("Input parameters (required):");
     info!("\tInput BWT: \"{}\"", in_fn);
@@ -39,15 +47,15 @@ fn main() {
     if &in_fn == "stdin" {
         input_reader = Box::new(io::stdin());
     } else {
-        match File::open(&bwt_fn) {
+        input_reader = Box::new(match File::open(&in_fn) {
             Ok(fp) => {
-                input_reader = Box::new(fp);
+                fp
             },
             Err(e) => {
                 error!("Failed to open BWT file: {:?}", e);
                 std::process::exit(exitcode::NOINPUT);
             }
-        };
+        });
     }
 
     info!("\tOutput BWT: \"{}\"", bwt_fn);
@@ -58,7 +66,7 @@ fn main() {
             std::process::exit(exitcode::NOINPUT);
         }
     };
-
+    
     //this is where the work happens
     let comp_bwt = convert_to_vec(input_reader);
     save_bwt_numpy(&comp_bwt[..], &bwt_fn).unwrap();
