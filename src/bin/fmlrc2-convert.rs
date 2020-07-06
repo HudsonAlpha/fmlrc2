@@ -43,11 +43,10 @@ fn main() {
 
     info!("Input parameters (required):");
     info!("\tInput BWT: \"{}\"", in_fn);
-    let input_reader: Box<dyn io::Read>;
-    if &in_fn == "stdin" {
-        input_reader = Box::new(io::stdin());
+    let input_reader: Box<dyn io::Read> = if &in_fn == "stdin" {
+        Box::new(io::stdin())
     } else {
-        input_reader = Box::new(match File::open(&in_fn) {
+        Box::new(match File::open(&in_fn) {
             Ok(fp) => {
                 fp
             },
@@ -55,8 +54,8 @@ fn main() {
                 error!("Failed to open BWT file: {:?}", e);
                 std::process::exit(exitcode::NOINPUT);
             }
-        });
-    }
+        })
+    };
 
     info!("\tOutput BWT: \"{}\"", bwt_fn);
     match File::create(&bwt_fn) {
