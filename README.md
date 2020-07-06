@@ -6,7 +6,11 @@ This repo contains the source code for FMLRC v2, based on the same methodology u
 All installation options assume you have installed [Rust](https://www.rust-lang.org) along with the `cargo` crate manager for Rust.
 
 ### From Cargo
-Coming soon.
+```bash
+cargo install fmlrc
+fmlrc2 -h
+fmlrc2-convert -h
+```
 
 ### From GitHub
 ```bash 
