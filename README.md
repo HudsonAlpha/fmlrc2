@@ -9,9 +9,10 @@ All installation options assume you have installed [Rust](https://www.rust-lang.
 Coming soon.
 
 ### From GitHub
-```
+```bash 
 git clone https://github.com/HudsonAlpha/rust-fmlrc.git
 cd rust-fmlrc
+#testing optional, some tests will fail if ropebwt2 is not installed or cannot be found on PATH
 cargo test --release
 cargo build --release
 ./target/release/fmlrc2 -h
@@ -57,3 +58,23 @@ Currently, only uncompressed FASTA is supported for output reads.
 4. Input handling - thanks to [needletail](https://crates.io/crates/needletail), the uncorrected reads can be in FASTA/FASTQ and may or may not be gzip compressed.
 5. SIMD accelerated alignment - thanks to [triple_accel](https://crates.io/crates/triple_accel), the correction alignment step can be accelerated with SIMD instructions when available
 6. Unit testing - FMLRC v2 has unit testing through the standard Rust testing framework (i.e. `cargo test`)
+
+## Reference
+FMLRC v2 does not currently have a pre-print or paper. If you use FMLRC v2, please cite the FMLRC v1 paper:
+
+[Wang, Jeremy R. and Holt, James and McMillan, Leonard and Jones, Corbin D. FMLRC: Hybrid long read error correction using an FM-index. BMC Bioinformatics, 2018. 19 (1) 50.](https://bmcbioinformatics.biomedcentral.com/articles/10.1186/s12859-018-2051-3)
+
+## License
+Licensed under either of
+
+ * Apache License, Version 2.0
+   ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+ * MIT license
+   ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+
+at your option.
+
+## Contribution
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
+dual licensed as above, without any additional terms or conditions.

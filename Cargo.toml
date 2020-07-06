@@ -3,6 +3,7 @@ name = "fmlrc"
 version = "2.0.0"
 authors = ["holtjma <jholt@hudsonalpha.org>"]
 edition = "2018"
+license = "MIT OR Apache-2.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
