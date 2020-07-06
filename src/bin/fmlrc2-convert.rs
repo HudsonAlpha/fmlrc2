@@ -20,7 +20,7 @@ fn main() {
     let mut in_fn: String = "stdin".to_string();
     let bwt_fn: String;
 
-    let matches = App::new("FMLRC BWT Converter")
+    let matches = App::new("FMLRC2 BWT Converter")
         .version(VERSION.unwrap_or("?"))
         .author("J. Matthew Holt <jholt@hudsonalpha.org>")
         .about("FMLCR BWT Converter - Rust implementation")

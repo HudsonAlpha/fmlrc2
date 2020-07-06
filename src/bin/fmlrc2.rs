@@ -40,7 +40,7 @@ fn main() {
     let mut cache_size: usize = 8;
     let verbose_mode: bool;
     
-    let matches = App::new("FMLRC")
+    let matches = App::new("FMLRC2")
         .version(VERSION.unwrap_or("?"))
         .author("J. Matthew Holt <jholt@hudsonalpha.org>")
         .about("FM-index Long Read Corrector - Rust implementation")
