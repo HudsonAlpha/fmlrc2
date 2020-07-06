@@ -53,6 +53,11 @@ pub struct CorrectionResults {
     pub avg_after: f64
 }
 
+/// This will run a correction "job" on a single long read using a shared BWT resource.
+/// # Argument
+/// * `arc_bwt` - the shared BitVectorBWT resource
+/// * `long_read` - the read to correct
+/// * `arc_params` - the shared parameters to use for performing the correction
 pub fn correction_job(arc_bwt: Arc<BitVectorBWT>, long_read: LongReadFA, arc_params: Arc<CorrectionParameters>) -> CorrectionResults {
     //these clearly are not mutable, nor should they be
     let bwt: &BitVectorBWT = &*arc_bwt;
@@ -127,7 +132,6 @@ pub fn correction_pass(bwt: &BitVectorBWT, seq_i: &[u8], params: &CorrectionPara
     let mut max_branch_length: usize;
 
     let mut bridge_points: Vec<Vec<u8>>;
-    //let mut bridge_points_ed: Vec<Vec<u8>> = Vec::<Vec<u8>>::new();
     let mut corrections_list: Vec<Correction> = Vec::<Correction>::new();
     let mut new_corr: Correction;
     
@@ -570,6 +574,13 @@ pub fn bridge_kmers(
     }
 }
 
+/// Given an initial k-mer, this will extend outwards from that k-mer up to the max branch length.
+/// # Arguments
+/// * `bwt` - the BWT source for k-mer counts
+/// * `seed_kmer` - the initial seed k-mer in integer form
+/// * `min_count` - the minimum count to consider a k-mer as present
+/// * `branch_limit` - the maximum allowed number of branches
+/// * `max_branch_len` - the maximum length of any given branch
 pub fn assemble_from_kmer(
     bwt: &BitVectorBWT, seed_kmer: &[u8], min_count: u64, branch_limit: usize, max_branch_len: usize
 ) -> Vec<Vec<u8>> {

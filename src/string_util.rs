@@ -71,7 +71,7 @@ pub fn convert_stoi(seq: &str) -> Vec<u8> {
     ret
 }
 
-/// Helper function that converts an integer array to it's corresponding String representation
+/// Helper function that converts an integer array to its corresponding String representation
 /// # Arguments
 /// * `iseq` - the integer sequence to convert to String
 /// # Examples

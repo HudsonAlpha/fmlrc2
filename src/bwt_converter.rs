@@ -31,7 +31,6 @@ pub const COUNT_MASK: u8 = 0x1F;
 pub fn convert_to_vec(bwt: impl Read) -> Vec<u8> {
     let mut translate: [u8; 256] = [255; 256];
     let valid_symbols = "$ACGNT";
-    //let mut x = 0;
     for (x, c) in valid_symbols.bytes().enumerate() {
         translate[c as usize] = x as u8;
     }
