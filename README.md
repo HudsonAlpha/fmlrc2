@@ -51,7 +51,7 @@ Currently, only uncompressed FASTA is supported for output reads.
 
 #### Options to consider
 1. `-h` - see full list of options and exit
-2. `-k`, `-K` - sets the k-mer sizes to use, default is `[21, 59]`; all values are sorted from lowest to highest prior to correction
+2. `-k`, `--K` - sets the k-mer sizes to use, default is `[21, 59]`; all values are sorted from lowest to highest prior to correction
 3. `-t`, `--threads` - number of correction threads to use (default: 1)
 4. `-C`, `--cache_size` - the length of sequences to pre-compute (i.e. `C`-mers); will reduce CPU-time of queries by `O(C)` but *increases* cache memory usage by `O(6^C)`; default of `8` uses ~25MB; if memory is not an issue, consider using `10` with ~1GB cache footprint (or larger if memory _really_ isn't an issue)
 
