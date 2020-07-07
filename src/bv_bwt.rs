@@ -14,7 +14,7 @@ const ZERO_COUNT_VEC: [u64; 256] = [0; 256];
 // sweet spot seems to be 8, providing a definitely speed boost while using ~25MB,
 // so negligible overhead compared to FMLRC as a whole
 // 9 is ~153MB, and 10 is ~922MB; 9 does offer a boost, but I'd be hesistant to use >=10 due to mem reqs
-pub const DEFAULT_CACHE_K: usize = 8; 
+const DEFAULT_CACHE_K: usize = 8; 
 
 /// Structure that contains a bit vector-based BWT+FM-index implementation
 pub struct BitVectorBWT {
@@ -30,13 +30,14 @@ pub struct BitVectorBWT {
     kmer_cache: Vec<BWTRange>
 }
 
-/// Basic struct for containing a range in a BWT
+/// Basic struct for containing a range in a BWT.
+/// Only contains fields `l` and `h`, representing a range [l, h).
 #[derive(Clone,Copy,Default,Debug,Eq,PartialEq)]
 pub struct BWTRange {
     /// the lower bound, inclusive
-    l: u64,
+    pub l: u64,
     /// the upper bound, exclusive
-    h: u64
+    pub h: u64
 }
 
 impl Default for BitVectorBWT {
@@ -121,7 +122,13 @@ impl BitVectorBWT {
     /// Initializes the BWT from the numpy file format for compressed BWTs
     /// # Arguments
     /// * `filename` - the name of the file to load into memory
-    // TODO: figure out how to write a test for this
+    /// # Examples
+    /// ```ignore
+    /// use fmlrc::bv_bwt::BitVectorBWT;
+    /// let mut bwt = BitVectorBWT::new();
+    /// let filename: String = "/path/to/my/file/comp_msbwt.npy".to_string();
+    /// bwt.load_numpy_file(&filename);
+    /// ```
     pub fn load_numpy_file(&mut self, filename: &str) -> std::io::Result<()> {
         //read the numpy header: http://docs.scipy.org/doc/numpy-1.10.1/neps/npy-format.html
         //get the initial file size

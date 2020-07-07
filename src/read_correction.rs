@@ -14,16 +14,25 @@ const VALID_CHARS_LEN: usize = VALID_CHARS.len();
 /// stores options for running the correction algorithms
 pub struct CorrectionParameters {
     //use_fm_index: bool, //old parameter that toggled between bit vector and classic mode
+    /// The k-mer sizes to use for correction, performs one pass per value in the array
     pub kmer_sizes: Vec<usize>,
+    /// The absolute minimum k-mer count to be considered present
     pub min_count: u64,
+    /// The maximum length of sequence to attempt to correct
     pub max_branch_attempt_length: usize,
+    /// A multiplier on `k` to limit the number of branches explored
     pub branch_limit_factor: f64,
+    /// A buffering factor to allow bridge corrections to be longer than the original sequence
     pub branch_buffer_factor: f64,
     //TODO: add a tail_truncate_factor that buts a bounding box around min length and max length
+    /// A factor limiting partial corrections when bridges cannot be found
     pub midpoint_ed_factor: f64,
+    /// A buffering factor to allow assembly corrections to be longer than the original sequence
     pub tail_buffer_factor: f64,
+    /// A multiplier factor on the median for dynamic minimum k-mer count to be considered present
     pub frac: f64,
     //fm_bit_power: u8, //only matters for classic mode which isn't implemented currently
+    /// Will calculate more stats if verbose is set to `true`
     pub verbose: bool
 }
 
@@ -37,19 +46,28 @@ pub struct Correction {
 /// a struct for storing generic read
 #[derive(Clone,Debug)]
 pub struct LongReadFA {
+    /// The index associated with the read
     pub read_index: u64,
+    /// The read label/identifier
     pub label: String,
+    /// The actual genomic sequence
     pub seq: String
 }
 
 /// a struct for storing the modified string
 #[derive(Clone,Debug)]
 pub struct CorrectionResults {
+    /// The index associated with the read
     pub read_index: u64,
+    /// The read label/identifier
     pub label: String,
+    /// The original, uncorrected sequence
     pub original_seq: String,
+    /// The modified, corrected sequence
     pub corrected_seq: String,
+    /// If verbose is set, this will store the average k-mer count before correction
     pub avg_before: f64,
+    /// If verbose is set, this will store the average k-mer count after correction
     pub avg_after: f64
 }
 
@@ -462,8 +480,6 @@ fn pick_best_levenshtein(original: &[u8], candidates: Vec<Vec<u8>>, bwt: &BitVec
 /// * `min_count` - the minimum count required for a path to be consider solid
 /// * `branch_limit` - the maximum number of branches to explore before giving up on all paths
 /// * `max_branch_len` - the maximum branch length allowed before giving up on a path
-/// # Examples
-/// TODO: See unit tests for current examples.
 pub fn bridge_kmers(
     bwt: &BitVectorBWT, seed_kmer: &[u8], target_kmer: &[u8], min_count: u64, branch_limit: usize, 
     max_branch_len: usize

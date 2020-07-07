@@ -6,11 +6,17 @@ use std::fs::{File, OpenOptions};
 use std::io::prelude::*;
 use std::io::{BufWriter, Read};
 
+/// The number of characters in our alphabet
 pub const VC_LEN: usize = 6;      //$ A C G N T
+/// The number of bits for storing the character in a byte
 pub const LETTER_BITS: usize = 3; //defined
+/// The number of bit for storing quantity in a byte
 pub const NUMBER_BITS: usize = 5; //8-letterBits
+/// Multiplier for multi-byte runs
 pub const NUM_POWER: usize = 32;  //2**numberBits
+/// Contains the character mask
 pub const MASK: u8 = 0x07;        //255 >> numberBits
+/// Contains the right-shifted number mask
 pub const COUNT_MASK: u8 = 0x1F;
 
 //TODO: convert_to_vec currently pulls the whole compressed BWT into memory, which I'm largely okay with
