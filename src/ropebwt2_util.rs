@@ -83,7 +83,7 @@ mod tests {
     fn write_strings_to_fqgz(data: Vec<&str>) -> NamedTempFile {
         let file: NamedTempFile = Builder::new().prefix("temp_data_").suffix(".fq.gz").tempfile().unwrap();
         let mut gz = GzBuilder::new().write(file, Compression::default());
-        let mut i: usize = 0;
+        let mut i: u64 = 0;
         for s in data {
             writeln!(gz, "@seq_{}\n{}\n+\n{}", i, s, "F".repeat(s.len())).unwrap();
             i += 1;
