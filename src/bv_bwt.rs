@@ -158,10 +158,18 @@ impl BitVectorBWT {
         //finally read in everything else
         let bwt_disk_size: u64 = full_file_size - skip_bytes as u64;
         self.bwt = vec![0; bwt_disk_size as usize];
-        let read_count: usize = file.read(&mut self.bwt[..])?;
-        if read_count as u64 != bwt_disk_size {
-            panic!("Could not read {:?} bytes of BWT body for file {:?}", bwt_disk_size, filename);
+        
+        let mut read_count: usize = 0;
+        let mut last_read: usize = 1;//can be any dummy value > 0
+        while last_read > 0 {
+            last_read = file.read(&mut self.bwt[read_count..])?;
+            read_count += last_read;
         }
+        
+        if read_count as u64 != bwt_disk_size {
+            panic!("Only read {:?} of {:?} bytes of BWT body for file {:?}", read_count, bwt_disk_size, filename);
+        }
+
         //TODO: I imagine we want to use the info here somehow?
         //printf("loaded bwt with %lu compressed values\n", this->bwt.size());
         info!("Loading BWT with {:?} compressed values", bwt_disk_size);
