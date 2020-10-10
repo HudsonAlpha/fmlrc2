@@ -158,14 +158,7 @@ impl BitVectorBWT {
         //finally read in everything else
         let bwt_disk_size: u64 = full_file_size - skip_bytes as u64;
         self.bwt = vec![0; bwt_disk_size as usize];
-        
-        let mut read_count: usize = 0;
-        let mut last_read: usize = 1;//can be any dummy value > 0
-        while last_read > 0 {
-            last_read = file.read(&mut self.bwt[read_count..])?;
-            read_count += last_read;
-        }
-        
+        let read_count: usize = file.read_to_end(&mut self.bwt)?;
         if read_count as u64 != bwt_disk_size {
             panic!("Only read {:?} of {:?} bytes of BWT body for file {:?}", read_count, bwt_disk_size, filename);
         }
