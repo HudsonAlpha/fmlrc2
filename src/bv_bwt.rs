@@ -1,5 +1,6 @@
 
 extern crate log;
+extern crate serde_json;
 
 use log::info;
 use std::io::prelude::*;
@@ -137,10 +138,10 @@ impl BitVectorBWT {
 
         //read the initial fixed header
         let mut file = fs::File::open(&filename)?;
-        let mut init_header: Vec<u8> = vec![0; 16];
+        let mut init_header: Vec<u8> = vec![0; 10];
         let read_count: usize = file.read(&mut init_header[..])?;
-        if read_count != 16 {
-            panic!("Could not read initial 16 bytes of header for file {:?}", filename);
+        if read_count != 10 {
+            panic!("Could not read initial 10 bytes of header for file {:?}", filename);
         }
 
         //read the dynamic header
@@ -149,18 +150,53 @@ impl BitVectorBWT {
         if skip_bytes % 16 != 0 {
             skip_bytes = ((skip_bytes / 16)+1)*16;
         }
-        let mut skip_header: Vec<u8> = vec![0; skip_bytes-16];
-        let read_count: usize = file.read(&mut skip_header[..])?;
-        if read_count != skip_bytes-16 {
-            panic!("Could not read bytes 16-{:?} of header for file {:?}", skip_bytes, filename);
+        let mut skip_header: Vec<u8> = vec![0; skip_bytes-10];
+        match file.read_exact(&mut skip_header[..]) {
+            Ok(()) => {},
+            Err(e) => {
+                return Err(
+                    std::io::Error::new(
+                        e.kind(),
+                        format!("Could not read bytes 10-{:?} of header for file {:?}, root-error {:?}", skip_bytes, filename, e)
+                    )
+                );
+            }
+        }
+        
+        //parse the header string for the expected length, requires a lot of manipulation of the string because of numpy header styling
+        let header_string = String::from_utf8(skip_header).unwrap()
+            .replace("\'", "\"")
+            .replace("False", "false")
+            .replace("(", "[")
+            .replace(")", "]")
+            .replace(", }", "}")
+            .replace(", ]", "]")
+            .replace(",]", "]");
+        let header_dict: serde_json::Value = serde_json::from_str(&header_string)
+            .expect(&format!("Error while parsing header string: {:?}", header_string));
+        let expected_length: u64 = header_dict["shape"][0].as_u64().unwrap();
+        
+        //check that the disk size matches our expectation
+        let bwt_disk_size: u64 = full_file_size - skip_bytes as u64;
+        if expected_length != bwt_disk_size {
+            return Err(
+                std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    format!("Header indicates shape of {:?}, but remaining file size is {:?}", expected_length, bwt_disk_size)
+                )
+            );
         }
 
         //finally read in everything else
-        let bwt_disk_size: u64 = full_file_size - skip_bytes as u64;
-        self.bwt = vec![0; bwt_disk_size as usize];
+        self.bwt = Vec::<u8>::with_capacity(bwt_disk_size as usize);//vec![0; bwt_disk_size as usize];
         let read_count: usize = file.read_to_end(&mut self.bwt)?;
         if read_count as u64 != bwt_disk_size {
-            panic!("Only read {:?} of {:?} bytes of BWT body for file {:?}", read_count, bwt_disk_size, filename);
+            return Err(
+                std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    format!("Only read {:?} of {:?} bytes of BWT body for file {:?}", read_count, bwt_disk_size, filename)
+                )
+            );
         }
 
         //TODO: I imagine we want to use the info here somehow?
