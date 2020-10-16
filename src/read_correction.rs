@@ -615,7 +615,7 @@ pub fn bridge_kmers(
     }
 }
 
-/// Traverses from one kmer to another using the BWT for querying counts
+/// Searches for a sequence that is supported by the `bwt` and requires the initial final k-mers to match.
 /// # Arguments
 /// * `bwt` - the BWT that contains count data
 /// * `sequence` - the integer form sequence we want to replace
@@ -624,6 +624,7 @@ pub fn bridge_kmers(
 /// * `max_count` - the maximum count allowed for a path to be considered solit
 /// * `branch_limit` - the maximum number of branches to explore before giving up on all paths
 /// * `max_branch_len` - the maximum branch length allowed before giving up on a path
+/// * `allow_target_mismatch` - (BETA) if True, this does not require the final k-mer to match the original sequence
 pub fn bridge_sequence(
     bwt: &BitVectorBWT, sequence: &[u8], kmer_len: usize, min_count: u64, max_count: u64,
     branch_limit: usize, max_branch_len: usize, allow_target_mismatch: bool
