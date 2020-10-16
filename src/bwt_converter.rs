@@ -35,6 +35,13 @@ pub const COUNT_MASK: u8 = 0x1F;
 /// assert_eq!(vec.len(), 6);
 /// ```
 pub fn convert_to_vec(bwt: impl Read) -> Vec<u8> {
+    iter_convert_to_vec(bwt.bytes().map(|x| x.unwrap()))
+}
+
+pub fn iter_convert_to_vec<I>(bwt: I) -> Vec<u8>
+where
+    I: Iterator<Item = u8>
+{
     let mut translate: [u8; 256] = [255; 256];
     let valid_symbols = "$ACGNT";
     for (x, c) in valid_symbols.bytes().enumerate() {
@@ -45,8 +52,7 @@ pub fn convert_to_vec(bwt: impl Read) -> Vec<u8> {
     let mut curr: u8 = 36; //'$' - can be any valid character as long as count below is 0
     let mut count: u64 = 0;
     let mut sym_count: [u64; 6] = [0; 6];
-    for c in bwt.bytes() {
-        let ch = c.unwrap();
+    for ch in bwt {
         if ch == curr {
             count += 1;
         }
