@@ -34,6 +34,8 @@ assert_eq!(kmer_count, 1);
 pub mod bv_bwt;
 /// Contains the function for reformating a BWT string into the expected run-length format or numpy file
 pub mod bwt_converter;
+/// Contains an implementation of a dynamic WFA
+pub mod dynamic_wfa;
 /// Contains bit vector with basic rank support; other crates exist with this, but they tended to be slow for some reason
 pub mod indexed_bit_vec;
 /// Contains a wrapper around the rust-bio FASTA writer, but forces an ordering on the reads
