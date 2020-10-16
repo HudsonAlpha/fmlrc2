@@ -1,10 +1,15 @@
 
 extern crate log;
 
+//use std::cmp::{Ordering, Reverse, max, min};
+//use std::cmp::Reverse;
+//use std::collections::{BinaryHeap, HashSet};
+use std::collections::BinaryHeap;
 use std::sync::Arc;
 use triple_accel::{levenshtein_exp,levenshtein_search,Match};
 
 use crate::bv_bwt::BitVectorBWT;
+use crate::dynamic_wfa::DynamicWFA;
 use crate::stats_util;
 use crate::string_util;
 
@@ -142,6 +147,7 @@ pub fn correction_pass(bwt: &BitVectorBWT, seq_i: &[u8], params: &CorrectionPara
     
     //try to dynamically set the threshold, but make sure its at least MIN_COUNT
     let threshold: u64 = std::cmp::max((params.frac * nz_med as f64) as u64, params.min_count);
+    let upper_threshold: u64 = 10*nz_med;
 
     //prep for the actual corrections now
     let mut prev_found: isize = -1;
@@ -200,17 +206,29 @@ pub fn correction_pass(bwt: &BitVectorBWT, seq_i: &[u8], params: &CorrectionPara
 
                 if max_branch_length < params.max_branch_attempt_length {
                     //try forward first
-                    bridge_points = bridge_kmers(bwt, &seed_kmer, &target_kmer, threshold, branch_limit, max_branch_length);
-
+                    //bridge_points = bridge_kmers(bwt, &seed_kmer, &target_kmer, threshold, branch_limit, max_branch_length);
+                    bridge_points = bridge_sequence(
+                        bwt, 
+                        &seq_i[prev_found as usize..x+kmer_size], 
+                        kmer_size, 
+                        threshold, 
+                        upper_threshold,
+                        branch_limit, 
+                        max_branch_length,
+                        false
+                    );
+                    
                     //try reverse complement if we failed
                     if bridge_points.is_empty() {
-                        bridge_points = bridge_kmers(
+                        bridge_points = bridge_sequence(
                             bwt, 
-                            &string_util::reverse_complement_i(&target_kmer),
-                            &string_util::reverse_complement_i(&seed_kmer),
+                            &string_util::reverse_complement_i(&seq_i[prev_found as usize..x+kmer_size]),
+                            kmer_size,
                             threshold,
+                            upper_threshold,
                             branch_limit,
-                            max_branch_length
+                            max_branch_length,
+                            false
                         );
                         
                         //make sure to rev-comp the results here
@@ -220,7 +238,8 @@ pub fn correction_pass(bwt: &BitVectorBWT, seq_i: &[u8], params: &CorrectionPara
                     }
                     
                     //we are doing a bridge, so use straight levenshtein
-                    let best_match: Option<Vec<u8>> = pick_best_levenshtein(&seq_i[prev_found as usize..x+kmer_size], bridge_points, bwt, kmer_size);
+                    //let best_match: Option<Vec<u8>> = pick_best_levenshtein(&seq_i[prev_found as usize..x+kmer_size], bridge_points, bwt, kmer_size);
+                    let best_match: Option<Vec<u8>> = pick_best_pileup(bridge_points, bwt, kmer_size);
 
                     //pick out the best result from the full levenshtein
                     if let Some(bm) = best_match {
@@ -239,6 +258,23 @@ pub fn correction_pass(bwt: &BitVectorBWT, seq_i: &[u8], params: &CorrectionPara
 
                         //extend left to midpoint
                         bridge_points = assemble_from_kmer(bwt, &seed_kmer, threshold, branch_limit, max_branch_length);
+                        
+                        //this and below did not work like I originally thought; it may need a slightly different
+                        //approach that attempt to find the optimum edit distance while extending
+                        /*
+                        bridge_points = bridge_sequence(
+                            bwt, 
+                            &seq_i[prev_found as usize..mid_point], 
+                            kmer_size, 
+                            threshold, 
+                            upper_threshold,
+                            branch_limit, 
+                            max_branch_length,
+                            true
+                        );
+                        */
+
+                        //let best_match: Option<Vec<u8>> = pick_best_pileup(bridge_points, bwt, kmer_size);
                         let best_match: Option<Vec<u8>> = pick_best_levenshtein_search(&seq_i[prev_found as usize..mid_point], bridge_points, bwt, kmer_size, max_edit_distance);
                         if let Some(bm) = best_match {
                             new_corr = Correction {
@@ -252,10 +288,23 @@ pub fn correction_pass(bwt: &BitVectorBWT, seq_i: &[u8], params: &CorrectionPara
                         //extend right to midpoint
                         let rev_target = string_util::reverse_complement_i(&target_kmer);
                         bridge_points = assemble_from_kmer(bwt, &rev_target, threshold, branch_limit, max_branch_length);
+                        /*
+                        bridge_points = bridge_sequence(
+                            bwt, 
+                            &string_util::reverse_complement_i(&seq_i[mid_point..x+kmer_size]),
+                            kmer_size, 
+                            threshold, 
+                            upper_threshold,
+                            branch_limit, 
+                            max_branch_length,
+                            true
+                        );
+                        */
                         
                         //remember to rev comp this also
                         let orig: Vec<u8> = string_util::reverse_complement_i(&seq_i[mid_point..x+kmer_size]);
                         let best_match: Option<Vec<u8>> = pick_best_levenshtein_search(&orig, bridge_points, bwt, kmer_size, max_edit_distance);
+                        //let best_match: Option<Vec<u8>> = pick_best_pileup(bridge_points, bwt, kmer_size);
                         if let Some(bm) = best_match {
                             //need to rev-comp the result, and it goes from midpoint to the right side
                             let rev_comp_seq: Vec<u8> = string_util::reverse_complement_i(&bm);
@@ -283,7 +332,8 @@ pub fn correction_pass(bwt: &BitVectorBWT, seq_i: &[u8], params: &CorrectionPara
             //copy the last found k-mer and assemble outwards
             seed_kmer[..].clone_from_slice(&seq_i[prev_found as usize..prev_found as usize+kmer_size]);
             bridge_points = assemble_from_kmer(bwt, &seed_kmer, threshold, branch_limit, max_branch_length);
-            
+            //bridge_points = wave_correction(bwt, &seq_i[prev_found as usize..], kmer_size, threshold, branch_limit, max_branch_length, false);
+
             //now get the best match
             let best_match: Option<Vec<u8>> = pick_best_levenshtein_search(&seq_i[prev_found as usize..], bridge_points, bwt, kmer_size, 0xFFFFFFFF);
             if let Some(bm) = best_match {
@@ -409,16 +459,14 @@ fn pick_best_levenshtein_search(original: &[u8], candidates: Vec<Vec<u8>>, bwt: 
     }
 }
 
-/// This function will take an original sequence and a candidate list and pick the best candidate to return
-/// after performing some sanity checks on the mapping. This performs a full comparison because it's a bridge.
-/// TODO: figure out if the checks occuring here are slowing us down, and identity ways to safely short-circuit
+/// This function will take a candidate list and pick the best candidate to return based on the pileup support
+/// in the BWT. 
 /// # Arguments
-/// * `original` - the original sequence in integer format
-/// * `candidates` - the Vec of candidates, each in integer format
+/// * `candidates` - the Vec of candidates, each in integer format; for speed, we will remove the best candidate directly from this list
 /// * `bwt` - the BWT of counts (used for pileup tie-breaking)
 /// * `kmer_size` - the k-mer size to use for pileup tie-breaking
 #[inline]
-fn pick_best_levenshtein(original: &[u8], candidates: Vec<Vec<u8>>, bwt: &BitVectorBWT, kmer_size: usize) -> Option<Vec<u8>> {
+fn pick_best_pileup(mut candidates: Vec<Vec<u8>>, bwt: &BitVectorBWT, kmer_size: usize) -> Option<Vec<u8>> {
     //two short circuit points
     if candidates.is_empty() {
         //no valid bridges were found
@@ -426,49 +474,27 @@ fn pick_best_levenshtein(original: &[u8], candidates: Vec<Vec<u8>>, bwt: &BitVec
     }
     else if candidates.len() == 1 {
         //only one valid bridge, so short circuit here
-        Some(candidates[0].clone())
+        Some(candidates.remove(0))
     }
     else {
-        //we have multiple values, so check for edit distance
-        let mut ed_scores: Vec<u32> = Vec::<u32>::with_capacity(candidates.len());
-        for candidate in candidates.iter() {
-            //calculate the min distance
-            let score: u32 = levenshtein_exp(&original, &candidate);
-            ed_scores.push(score);
-        }
-        let min_score: u32 = *ed_scores.iter().min().unwrap();
-
-        //get everything with a good score
-        let mut candidates_ed: Vec<Vec<u8>> = Vec::<Vec<u8>>::with_capacity(candidates.len());
-        for y in 0..candidates.len() {
-            if ed_scores[y] == min_score {
-                candidates_ed.push(candidates[y].clone());
+        //used to check ED here, but no longer necessary with WFA already handling it
+        //TODO: is pileup or random better here?
+        //figure out which of the ones with equal edit distance has the most counts
+        let mut max_counts: u64 = 0;
+        let mut max_id: usize = 0;
+        let mut ed_pu: Vec<u64>;
+        let mut summation: u64;
+        for (y, candidate) in candidates.iter().enumerate() {
+            ed_pu = bwt.count_pileup(&candidate, kmer_size);
+            summation = ed_pu.iter().sum();
+            if summation > max_counts {
+                max_id = y;
+                max_counts = summation;
             }
         }
 
-        if candidates_ed.len() == 1 {
-            //only one with smallest edit distance
-            Some(candidates_ed.remove(0))
-        }
-        else {
-            //TODO: is pileup or random better here?
-            //figure out which of the ones with equal edit distance has the most counts
-            let mut max_counts: u64 = 0;
-            let mut max_id: usize = 0;
-            let mut ed_pu: Vec<u64>;
-            let mut summation: u64;
-            for (y, candidate) in candidates_ed.iter().enumerate() {
-                ed_pu = bwt.count_pileup(&candidate, kmer_size);
-                summation = ed_pu.iter().sum();
-                if summation > max_counts {
-                    max_id = y;
-                    max_counts = summation;
-                }
-            }
-
-            //now return the best candidate
-            Some(candidates_ed.remove(max_id))
-        }
+        //now return the best candidate
+        Some(candidates.remove(max_id))
     }
 }
 
@@ -578,6 +604,205 @@ pub fn bridge_kmers(
                     return Vec::<Vec<u8>>::new();
                 }
             }
+        }
+    }
+
+    //return the list of found bridges
+    if num_branched < branch_limit {
+        ret
+    }
+    else {
+        Vec::<Vec<u8>>::new()
+    }
+}
+
+/// Traverses from one kmer to another using the BWT for querying counts
+/// # Arguments
+/// * `bwt` - the BWT that contains count data
+/// * `sequence` - the integer form sequence we want to replace
+/// * `kmer_len` - the length of the k-mer to use for counting
+/// * `min_count` - the minimum count required for a path to be considered solid
+/// * `max_count` - the maximum count allowed for a path to be considered solit
+/// * `branch_limit` - the maximum number of branches to explore before giving up on all paths
+/// * `max_branch_len` - the maximum branch length allowed before giving up on a path
+pub fn bridge_sequence(
+    bwt: &BitVectorBWT, sequence: &[u8], kmer_len: usize, min_count: u64, max_count: u64,
+    branch_limit: usize, max_branch_len: usize, allow_target_mismatch: bool
+) -> Vec<Vec<u8>> {
+    //build up return
+    let mut ret = Vec::<Vec<u8>>::new();
+
+    //build some helper values we'll be looping through a lot
+    let seed_kmer = &sequence[..kmer_len];
+    let target_kmer = &sequence[sequence.len()-kmer_len..];
+    assert_eq!(kmer_len, target_kmer.len());
+    let mut counts: [u64; VALID_CHARS_LEN] = [0; VALID_CHARS_LEN];
+    let mut fw_counts: [u64; VALID_CHARS_LEN] = [0; VALID_CHARS_LEN];
+    let mut rev_counts: [u64; VALID_CHARS_LEN] = [0; VALID_CHARS_LEN];
+    let mut num_branched: usize = 0;
+    let mut total_found: usize;
+    let mut only_pos: usize = 0;
+
+    //these buffers are used to create query slices
+    let mut curr_buffer: Vec<u8> = vec![4; max_branch_len];
+    let mut rev_buffer: Vec<u8> = vec![4; max_branch_len];
+
+    //initialize the bridging with our seed k-mer
+    let mut possible_bridges = BinaryHeap::new();
+    let mut seed_vec: Vec<u8> = vec![0; kmer_len];
+    seed_vec.clone_from_slice(seed_kmer);
+    let mut initial_bridge = DynamicWFA::new(sequence);
+    for c in sequence[..kmer_len].iter() {
+        initial_bridge.append(*c);
+    }
+    possible_bridges.push(initial_bridge);
+
+    let mut max_edit_distance: usize = (0.30*max_branch_len as f64) as usize; 
+    /*if allow_target_mismatch {
+        (0.30*max_branch_len as f64) as usize
+    } else {
+        (0.30*max_branch_len as f64) as usize
+    };*/
+    
+    while !possible_bridges.is_empty() && num_branched < branch_limit {
+        //get a bridge to extend
+        //let Reverse((curr_ed, mut curr_bridge)) = possible_bridges.pop().unwrap();
+        let mut curr_bridge: DynamicWFA = possible_bridges.pop().unwrap();
+        
+        //if this ED is already worse than our best, just skip this one
+        if curr_bridge.get_edit_distance() > max_edit_distance {
+            continue;
+        }
+
+        //get some helper values ready
+        let cb_other_seq = curr_bridge.get_other_seq();
+        let mut curr_bridge_len = cb_other_seq.len();
+        let mut curr_offset: usize = 0;
+        num_branched += 1;
+
+        //TODO: replace this with copy slice? not sure how to do the rev comp in a one-line
+        for x in 0..kmer_len {
+            curr_buffer[x] = cb_other_seq[curr_bridge_len-kmer_len+x];
+            rev_buffer[x] = string_util::COMPLEMENT_INT[curr_buffer[x] as usize];
+        }
+
+        while curr_bridge_len < max_branch_len && curr_bridge.get_edit_distance() <= max_edit_distance {
+            //increase the offset into our buffers (i.e. shift the curr k-mer left and rev k-mer right)
+            curr_offset += 1;
+            
+            //do all the k-mer counting, efficient on rev-comp, then forward queries are added in
+            bwt.prefix_revkmer_noalloc_fixed(&rev_buffer[curr_offset..curr_offset+kmer_len-1], &mut rev_counts);
+            
+            //parallel forward query, doesn't seem to gain much if anything
+            bwt.postfix_kmer_noalloc_fixed(&curr_buffer[curr_offset..curr_offset+kmer_len-1], &mut fw_counts);
+            
+            //figure out how many extensions exist
+            total_found = 0;
+            for x in 0..VALID_CHARS_LEN {
+                //change the last symbol, then do the counts    
+                counts[x] = fw_counts[x] + rev_counts[x];
+                if counts[x] >= min_count && counts[x] <= max_count {
+                    total_found += 1;
+                    only_pos = x;
+                }
+            }
+            
+            match total_found {
+                0 => {
+                    //no solid extensions, break out of the loop
+                    break;
+                },
+                1 => {
+                    //only one extension, append it
+                    curr_bridge.append(VALID_CHARS[only_pos]);
+                    curr_bridge_len += 1;
+
+                    //extend k-mer buffers with the best character
+                    curr_buffer[curr_offset+kmer_len-1] = VALID_CHARS[only_pos];
+                    rev_buffer[curr_offset+kmer_len-1] = string_util::COMPLEMENT_INT[VALID_CHARS[only_pos] as usize];
+
+                    //check if we found the target
+                    if &curr_buffer[curr_offset..curr_offset+kmer_len] == target_kmer || (allow_target_mismatch && curr_bridge.get_max_distance()+max_edit_distance >= sequence.len()) {
+                        if curr_bridge.get_max_distance() >= sequence.len() {
+                            //the WFA reaches the end of the primary sequence, check the ED results
+                            if curr_bridge.get_edit_distance() < max_edit_distance {
+                                //bridge has lower ED, clear other results then push this one
+                                max_edit_distance = curr_bridge.get_edit_distance();
+                                ret.clear();
+                                ret.push(curr_bridge.get_other_seq().clone());
+                            } else if curr_bridge.get_edit_distance() == max_edit_distance {
+                                //bridge has same ED, just add to list
+                                ret.push(curr_bridge.get_other_seq().clone());
+                            }
+                        } else {
+                            //WFA doesn't reach the end, clone it and finalize it
+                            let mut finalized_bridge = curr_bridge.clone();
+                            finalized_bridge.finalize();
+                            assert!(finalized_bridge.get_max_distance() >= sequence.len());
+
+                            //now check the finalized ED and do appropriate things
+                            if finalized_bridge.get_edit_distance() < max_edit_distance {
+                                //bridge has lower ED, clear other results then push this one
+                                max_edit_distance = finalized_bridge.get_edit_distance();
+                                ret.clear();
+                                ret.push(finalized_bridge.get_other_seq().clone());
+                            } else if finalized_bridge.get_edit_distance() == max_edit_distance {
+                                //bridge has same ED, just add to list
+                                ret.push(finalized_bridge.get_other_seq().clone());
+                            }
+                        }
+                    }
+                },
+                _tf => {
+                    //multiple are found, push all of them as new candidate for extension
+                    for x in 0..VALID_CHARS_LEN {
+                        if counts[x] >= min_count && counts[x] <= max_count {
+                            //clone the bridge and then append the extension that was solid
+                            let mut new_bridge = curr_bridge.clone();
+                            new_bridge.append(VALID_CHARS[x]);
+                            
+                            //now we need to check if this extension matches our target and then push as appropriate
+                            curr_buffer[curr_offset+kmer_len-1] = VALID_CHARS[x];
+                            if &curr_buffer[curr_offset..curr_offset+kmer_len] == target_kmer || (allow_target_mismatch && new_bridge.get_max_distance()+max_edit_distance >= sequence.len()) {
+                                if new_bridge.get_max_distance() >= sequence.len() {
+                                    //the WFA reaches the end of the primary sequence, check the ED results
+                                    if new_bridge.get_edit_distance() < max_edit_distance {
+                                        //bridge has lower ED, clear other results then push this one
+                                        max_edit_distance = new_bridge.get_edit_distance();
+                                        ret.clear();
+                                        ret.push(new_bridge.get_other_seq().clone());
+                                    } else if new_bridge.get_edit_distance() == max_edit_distance {
+                                        //bridge has same ED, just add to list
+                                        ret.push(new_bridge.get_other_seq().clone());
+                                    }
+                                } else {
+                                    //WFA doesn't reach the end, clone it and finalize it
+                                    let mut finalized_bridge = new_bridge.clone();
+                                    finalized_bridge.finalize();
+                                    assert!(finalized_bridge.get_max_distance() >= sequence.len());
+        
+                                    //now check the finalized ED and do appropriate things
+                                    if finalized_bridge.get_edit_distance() < max_edit_distance {
+                                        //bridge has lower ED, clear other results then push this one
+                                        max_edit_distance = finalized_bridge.get_edit_distance();
+                                        ret.clear();
+                                        ret.push(finalized_bridge.get_other_seq().clone());
+                                    } else if finalized_bridge.get_edit_distance() == max_edit_distance {
+                                        //bridge has same ED, just add to list
+                                        ret.push(finalized_bridge.get_other_seq().clone());
+                                    }
+                                }
+                            }
+
+                            //finally add it to the extension list
+                            possible_bridges.push(new_bridge);
+                        }
+                    }
+
+                    //end this loop because we've added each one as an extension to the heap
+                    break;
+                }
+            };
         }
     }
 
@@ -798,6 +1023,31 @@ mod tests {
         let rev_seed = reverse_complement_i(&target);
         let rev_target = reverse_complement_i(&seed);
         let rev_bridges = bridge_kmers(&bwt, &rev_seed, &rev_target, min_count, branch_lim, max_branch_len);
+        assert_eq!(rev_bridges.len(), 1);
+        assert_eq!(rev_bridges[0], reverse_complement_i(&query));
+    }
+
+    #[test]
+    fn test_bridge_sequence() {
+        //build our test and verify it's fine
+        let bwt = get_constant_bwt();
+        let query = convert_stoi(&"AACGGATCAAGCTTACCAGTATTTACGT");
+        assert_eq!(bwt.count_kmer(&query), 30);
+
+        //okay, now test the actual bridging
+        let seed = convert_stoi(&"AACGGAT");
+        let target = convert_stoi(&"TTTACGT");
+        let min_count = 15;
+        let max_count = 1000;
+        let branch_lim = 20;
+        let max_branch_len = 40;
+        let bridges = bridge_sequence(&bwt, &query, seed.len(), min_count, max_count, branch_lim, max_branch_len, false);
+        assert_eq!(bridges.len(), 1);
+        assert_eq!(bridges[0], query);
+        
+        //now do it in reverse complement space
+        let rev_seed = reverse_complement_i(&target);
+        let rev_bridges = bridge_sequence(&bwt, &reverse_complement_i(&query), rev_seed.len(), min_count, max_count, branch_lim, max_branch_len, false);
         assert_eq!(rev_bridges.len(), 1);
         assert_eq!(rev_bridges[0], reverse_complement_i(&query));
     }
