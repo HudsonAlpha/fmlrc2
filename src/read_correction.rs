@@ -334,7 +334,6 @@ pub fn correction_pass(bwt: &BitVectorBWT, seq_i: &[u8], params: &CorrectionPara
             //copy the last found k-mer and assemble outwards
             seed_kmer[..].clone_from_slice(&seq_i[prev_found as usize..prev_found as usize+kmer_size]);
             bridge_points = assemble_from_kmer(bwt, &seed_kmer, threshold, branch_limit, max_branch_length);
-            //bridge_points = wave_correction(bwt, &seq_i[prev_found as usize..], kmer_size, threshold, branch_limit, max_branch_length, false);
             /*
             //this method doesn't seem to work as well, and it's a lot slower for some reason
             //probably need to consider how to do this in the one directional assembly approach
@@ -678,7 +677,6 @@ pub fn bridge_sequence(
     
     while !possible_bridges.is_empty() && num_branched < branch_limit {
         //get a bridge to extend
-        //let Reverse((curr_ed, mut curr_bridge)) = possible_bridges.pop().unwrap();
         let mut curr_bridge: DynamicWFA = possible_bridges.pop().unwrap();
         
         //if this ED is already worse than our best, just skip this one
