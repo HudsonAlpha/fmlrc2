@@ -6,7 +6,7 @@ extern crate log;
 //use std::collections::{BinaryHeap, HashSet};
 use std::collections::BinaryHeap;
 use std::sync::Arc;
-use triple_accel::{levenshtein_exp,levenshtein_search,Match};
+use triple_accel::{levenshtein_search,Match};
 
 use crate::bv_bwt::BitVectorBWT;
 use crate::dynamic_wfa::DynamicWFA;
@@ -183,7 +183,10 @@ pub fn correction_pass(bwt: &BitVectorBWT, seq_i: &[u8], params: &CorrectionPara
 
                     //remember to rev comp this also
                     let orig: Vec<u8> = string_util::reverse_complement_i(&seq_i[0..x+kmer_size]);
-                    let best_match: Option<Vec<u8>> = pick_best_levenshtein_search(&orig, bridge_points, bwt, kmer_size, 0xFFFFFFFF);
+                    //this is the dynamic form, but this is worse in our test?
+                    //let max_edit_distance: u32 = ((x+kmer_size) as f64 * params.midpoint_ed_factor) as u32;
+                    let max_edit_distance = 0xFFFFFFFF;
+                    let best_match: Option<Vec<u8>> = pick_best_levenshtein_search(&orig, bridge_points, bwt, kmer_size, max_edit_distance);
                     if let Some(bm) = best_match {
                         //we found a best match, it will span from index 0 up to the start of the first found k-mer
                         let rev_comp_seq: Vec<u8> = string_util::reverse_complement_i(&bm);
@@ -214,8 +217,7 @@ pub fn correction_pass(bwt: &BitVectorBWT, seq_i: &[u8], params: &CorrectionPara
                         threshold, 
                         upper_threshold,
                         branch_limit, 
-                        max_branch_length,
-                        false
+                        max_branch_length
                     );
                     
                     //try reverse complement if we failed
@@ -227,8 +229,7 @@ pub fn correction_pass(bwt: &BitVectorBWT, seq_i: &[u8], params: &CorrectionPara
                             threshold,
                             upper_threshold,
                             branch_limit,
-                            max_branch_length,
-                            false
+                            max_branch_length
                         );
                         
                         //make sure to rev-comp the results here
@@ -327,15 +328,32 @@ pub fn correction_pass(bwt: &BitVectorBWT, seq_i: &[u8], params: &CorrectionPara
 
     //handle any tail sequences
     if prev_found >= 0 && pileup[pileup_size-1] < threshold {
-        max_branch_length = (params.tail_buffer_factor*(pileup_size-1-prev_found as usize+kmer_size) as f64) as usize;
+        max_branch_length = (params.tail_buffer_factor*(seq_i.len()-prev_found as usize) as f64) as usize;
+        //max_branch_length = (params.branch_buffer_factor*(pileup_size-1-prev_found as usize+kmer_size) as f64) as usize;
         if max_branch_length <= params.max_branch_attempt_length {
             //copy the last found k-mer and assemble outwards
             seed_kmer[..].clone_from_slice(&seq_i[prev_found as usize..prev_found as usize+kmer_size]);
             bridge_points = assemble_from_kmer(bwt, &seed_kmer, threshold, branch_limit, max_branch_length);
             //bridge_points = wave_correction(bwt, &seq_i[prev_found as usize..], kmer_size, threshold, branch_limit, max_branch_length, false);
+            /*
+            //this method doesn't seem to work as well, and it's a lot slower for some reason
+            //probably need to consider how to do this in the one directional assembly approach
+            bridge_points = bridge_sequence(
+                bwt, 
+                &seq_i[prev_found as usize..], 
+                kmer_size, 
+                threshold, 
+                upper_threshold,
+                branch_limit, 
+                max_branch_length,
+                true
+            );*/
 
             //now get the best match
-            let best_match: Option<Vec<u8>> = pick_best_levenshtein_search(&seq_i[prev_found as usize..], bridge_points, bwt, kmer_size, 0xFFFFFFFF);
+            //this is the dynamic form, but this is worse in our test?
+            //let max_edit_distance: u32 = (params.midpoint_ed_factor*(seq_i.len()-prev_found as usize) as f64) as u32;
+            let max_edit_distance: u32 = 0xFFFFFFFF;
+            let best_match: Option<Vec<u8>> = pick_best_levenshtein_search(&seq_i[prev_found as usize..], bridge_points, bwt, kmer_size, max_edit_distance);
             if let Some(bm) = best_match {
                 //now store the correction in range [0..x)
                 new_corr = Correction {
@@ -382,7 +400,6 @@ pub fn correction_pass(bwt: &BitVectorBWT, seq_i: &[u8], params: &CorrectionPara
 #[inline]
 fn pick_best_levenshtein_search(original: &[u8], candidates: Vec<Vec<u8>>, bwt: &BitVectorBWT, kmer_size: usize, max_ed: u32) -> Option<Vec<u8>> {
     let mut ed_scores: Vec<Option<Match>> = Vec::<Option<Match>>::with_capacity(candidates.len());
-    //let mut min_score: u32 = 0xFFFFFFFF;
     let mut min_score: u32 = max_ed;
     for candidate in candidates.iter() {
         //calculate the min distance
@@ -625,10 +642,9 @@ pub fn bridge_kmers(
 /// * `max_count` - the maximum count allowed for a path to be considered solit
 /// * `branch_limit` - the maximum number of branches to explore before giving up on all paths
 /// * `max_branch_len` - the maximum branch length allowed before giving up on a path
-/// * `allow_target_mismatch` - (BETA) if True, this does not require the final k-mer to match the original sequence
 pub fn bridge_sequence(
     bwt: &BitVectorBWT, sequence: &[u8], kmer_len: usize, min_count: u64, max_count: u64,
-    branch_limit: usize, max_branch_len: usize, allow_target_mismatch: bool
+    branch_limit: usize, max_branch_len: usize
 ) -> Vec<Vec<u8>> {
     //build up return
     let mut ret = Vec::<Vec<u8>>::new();
@@ -658,12 +674,8 @@ pub fn bridge_sequence(
     }
     possible_bridges.push(initial_bridge);
 
-    let mut max_edit_distance: usize = (0.30*max_branch_len as f64) as usize; 
-    /*if allow_target_mismatch {
-        (0.30*max_branch_len as f64) as usize
-    } else {
-        (0.30*max_branch_len as f64) as usize
-    };*/
+    //let mut max_edit_distance: usize = (0.30*max_branch_len as f64) as usize; 
+    let mut max_edit_distance: usize = max_branch_len - sequence.len();
     
     while !possible_bridges.is_empty() && num_branched < branch_limit {
         //get a bridge to extend
@@ -723,7 +735,7 @@ pub fn bridge_sequence(
                     rev_buffer[curr_offset+kmer_len-1] = string_util::COMPLEMENT_INT[VALID_CHARS[only_pos] as usize];
 
                     //check if we found the target
-                    if &curr_buffer[curr_offset..curr_offset+kmer_len] == target_kmer || (allow_target_mismatch && curr_bridge.get_max_distance()+max_edit_distance >= sequence.len()) {
+                    if &curr_buffer[curr_offset..curr_offset+kmer_len] == target_kmer {
                         if curr_bridge.get_max_distance() >= sequence.len() {
                             //the WFA reaches the end of the primary sequence, check the ED results
                             if curr_bridge.get_edit_distance() < max_edit_distance {
@@ -764,7 +776,7 @@ pub fn bridge_sequence(
                             
                             //now we need to check if this extension matches our target and then push as appropriate
                             curr_buffer[curr_offset+kmer_len-1] = VALID_CHARS[x];
-                            if &curr_buffer[curr_offset..curr_offset+kmer_len] == target_kmer || (allow_target_mismatch && new_bridge.get_max_distance()+max_edit_distance >= sequence.len()) {
+                            if &curr_buffer[curr_offset..curr_offset+kmer_len] == target_kmer {
                                 if new_bridge.get_max_distance() >= sequence.len() {
                                     //the WFA reaches the end of the primary sequence, check the ED results
                                     if new_bridge.get_edit_distance() < max_edit_distance {
@@ -1032,7 +1044,8 @@ mod tests {
     fn test_bridge_sequence() {
         //build our test and verify it's fine
         let bwt = get_constant_bwt();
-        let query = convert_stoi(&"AACGGATCAAGCTTACCAGTATTTACGT");
+        let query =     convert_stoi(&"AACGGATCAAGCTTACCAGTATTTACGT");
+        let error_seq = convert_stoi(&"AACGGATGAAGTTAACCAAGTTTTACGT");
         assert_eq!(bwt.count_kmer(&query), 30);
 
         //okay, now test the actual bridging
@@ -1042,13 +1055,13 @@ mod tests {
         let max_count = 1000;
         let branch_lim = 20;
         let max_branch_len = 40;
-        let bridges = bridge_sequence(&bwt, &query, seed.len(), min_count, max_count, branch_lim, max_branch_len, false);
+        let bridges = bridge_sequence(&bwt, &error_seq, seed.len(), min_count, max_count, branch_lim, max_branch_len);
         assert_eq!(bridges.len(), 1);
         assert_eq!(bridges[0], query);
         
         //now do it in reverse complement space
         let rev_seed = reverse_complement_i(&target);
-        let rev_bridges = bridge_sequence(&bwt, &reverse_complement_i(&query), rev_seed.len(), min_count, max_count, branch_lim, max_branch_len, false);
+        let rev_bridges = bridge_sequence(&bwt, &reverse_complement_i(&error_seq), rev_seed.len(), min_count, max_count, branch_lim, max_branch_len);
         assert_eq!(rev_bridges.len(), 1);
         assert_eq!(rev_bridges[0], reverse_complement_i(&query));
     }
@@ -1094,16 +1107,39 @@ mod tests {
         assert_eq!(bridges[0], query);
     }
 
+    /*
+    //originally for testing a version that allowed for one-way assembly, but it seemed to be very slow and give poor results
+    #[test]
+    fn test_assemble_bridge() {
+        //build our test and verify it's fine
+        let bwt = get_constant_bwt();
+        let query =     convert_stoi(&"AACGGATCAAGCTTACCAGTATTTACGT");
+        let error_seq = convert_stoi(&"AACGGATCAAAGCTACCACTATTACAT");
+        //let query =     convert_stoi(&"AACGGATC");
+        //let error_seq = convert_stoi(&"AACGGATT");
+        assert_eq!(bwt.count_kmer(&query), 30);
+
+        //okay, now test the actual bridging
+        let min_count = 15;
+        let max_count = 1000;
+        let branch_lim = 20;
+        let max_branch_len = query.len()+10; //fix the max length to the strings in the BWT
+        let bridges = bridge_sequence(&bwt, &error_seq, 7, min_count, max_count, branch_lim, max_branch_len, true);
+        assert_eq!(bridges.len(), 1);
+        assert_eq!(bridges[0], query);
+    }
+    */
+
     #[test]
     fn test_triple_accel() {
         //this test is mostly just for my sanity of understanding the library
         let query = convert_stoi(&"AACGGATCAAGCTTACCAGTATTTACGT");
         let short_seq = convert_stoi(&"AACGGATGAA"); //one base change
-        let long_seq = convert_stoi(&"AACGGATCATAGCTTACCAGTATATACGT"); //one insert, one change
+        //let long_seq = convert_stoi(&"AACGGATCATAGCTTACCAGTATATACGT"); //one insert, one change
 
         //use this one when we want to compare the full strings and get an edit distance
-        let l_dist = levenshtein_exp(&long_seq, &query);
-        assert_eq!(l_dist, 2);
+        //let l_dist = levenshtein_exp(&long_seq, &query);
+        //assert_eq!(l_dist, 2);
 
         //use this one when we need to do minimal head/tail corrections
         let matches: Vec<Match> = levenshtein_search(&short_seq, &query).collect();
