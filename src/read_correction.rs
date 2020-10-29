@@ -632,7 +632,7 @@ pub fn bridge_kmers(
     }
 }
 
-/// Searches for a sequence that is supported by the `bwt` and requires the initial final k-mers to match.
+/// Searches for a sequence that is supported by the `bwt` and requires the initial and final k-mers to match.
 /// # Arguments
 /// * `bwt` - the BWT that contains count data
 /// * `sequence` - the integer form sequence we want to replace
@@ -640,7 +640,7 @@ pub fn bridge_kmers(
 /// * `min_count` - the minimum count required for a path to be considered solid
 /// * `max_count` - the maximum count allowed for a path to be considered solit
 /// * `branch_limit` - the maximum number of branches to explore before giving up on all paths
-/// * `max_branch_len` - the maximum branch length allowed before giving up on a path
+/// * `max_branch_len` - the maximum branch length allowed before giving up on a path; this determines the maximum allowed edit distance during the search
 pub fn bridge_sequence(
     bwt: &BitVectorBWT, sequence: &[u8], kmer_len: usize, min_count: u64, max_count: u64,
     branch_limit: usize, max_branch_len: usize
