@@ -628,8 +628,10 @@ impl BitVectorBWT {
     /// ```
     #[inline]
     pub fn prefix_revkmer_noalloc_fixed(&self, rev_kmer: &[u8], counts: &mut [u64]) {
+        //TODO: it's odd that this tends to be slightly slower than the postfix_kmer version, is there something I'm missing here?
         //init to everything
         assert!(counts.len() >= 4);
+        assert!(rev_kmer.iter().all(|&v| v < VC_LEN as u8));
         let mut ret: BWTRange;
         let cut_kmer: &[u8];
 
@@ -648,7 +650,6 @@ impl BitVectorBWT {
 
         //iterate forward
         for c in cut_kmer.iter() {
-            assert!(*c < VC_LEN as u8);
             unsafe {
                 ret = self.constrain_range(*c, &ret);
             }
@@ -662,13 +663,13 @@ impl BitVectorBWT {
             }
         }
         //reverse complemented, so T G C A
-        let subrange = unsafe { self.constrain_range(5, &ret) };
+        let mut subrange = unsafe { self.constrain_range(5, &ret) };
         counts[0] = subrange.h-subrange.l;
-        let subrange = unsafe { self.constrain_range(3, &ret) };
+        subrange = unsafe { self.constrain_range(3, &ret) };
         counts[1] = subrange.h-subrange.l;
-        let subrange = unsafe { self.constrain_range(2, &ret) };
+        subrange = unsafe { self.constrain_range(2, &ret) };
         counts[2] = subrange.h-subrange.l;
-        let subrange = unsafe { self.constrain_range(1, &ret) };
+        subrange = unsafe { self.constrain_range(1, &ret) };
         counts[3] = subrange.h-subrange.l;
     }
 
@@ -697,6 +698,7 @@ impl BitVectorBWT {
     pub fn postfix_kmer_noalloc_fixed(&self, kmer: &[u8], counts: &mut [u64]) {
         //init to everything
         assert!(counts.len() >= 4);
+        assert!(kmer.iter().all(|&v| v < VC_LEN as u8));
         let mut ranges: [BWTRange; 4];
         let cut_kmer: &[u8];
         if kmer.len() >= self.cache_k {
@@ -713,10 +715,6 @@ impl BitVectorBWT {
             cut_kmer = kmer;
         }
 
-        //first iterator checks inputs
-        for c in cut_kmer.iter() {
-            assert!(*c < VC_LEN as u8);
-        }
         //do each one individually with breaks, tends to be fastest since it's post-fix based
         for x in 0..4 {
             for c in cut_kmer.iter().rev() {
