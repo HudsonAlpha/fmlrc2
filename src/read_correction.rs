@@ -147,6 +147,7 @@ pub fn correction_pass(bwt: &BitVectorBWT, seq_i: &[u8], params: &CorrectionPara
     
     //try to dynamically set the threshold, but make sure its at least MIN_COUNT
     let threshold: u64 = std::cmp::max((params.frac * nz_med as f64) as u64, params.min_count);
+    //TODO: make this a param
     let upper_threshold: u64 = 10*nz_med;
 
     //prep for the actual corrections now
