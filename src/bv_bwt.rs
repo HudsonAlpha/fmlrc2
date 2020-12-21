@@ -352,6 +352,7 @@ impl BitVectorBWT {
     fn get_rev_cache_index(&self, arr: &[u8]) -> usize {
         assert!(arr.len() >= self.cache_k);
         let mut ret: usize = 0;
+        //k-mer is reversed, so we need to iterate reversed
         for i in (0..self.cache_k).rev() {
             ret *= VC_LEN;
             ret += arr[i] as usize;
@@ -653,6 +654,8 @@ impl BitVectorBWT {
             unsafe {
                 ret = self.constrain_range(*c, &ret);
             }
+            /*
+            //this isn't actually beneficial in this use case; most of the time at least one thing is found
             if ret.h == ret.l {
                 //impossible to have any counts now, zero them out
                 counts[0] = 0;
@@ -661,6 +664,7 @@ impl BitVectorBWT {
                 counts[3] = 0;
                 return;
             }
+            */
         }
         //reverse complemented, so T G C A
         let mut subrange = unsafe { self.constrain_range(5, &ret) };
@@ -715,13 +719,28 @@ impl BitVectorBWT {
             cut_kmer = kmer;
         }
 
-        //do each one individually with breaks, tends to be fastest since it's post-fix based
+        /*
+        //TODO: this *should* be faster the the loop below because of short-circuiting on 0, but it's not
+        //it is faster in benchmarks, but in practice is slower; maybe the iterator?
         for x in 0..4 {
             for c in cut_kmer.iter().rev() {
                 if ranges[x].l == ranges[x].h {
                     break;
                 }
                 unsafe {
+                    ranges[x] = self.constrain_range(*c, &ranges[x]);
+                }
+            }
+        }
+        */
+        
+        //for unknown reasons, this is faster in practice; caching maybe?
+        for c in cut_kmer.iter().rev() {
+            assert!(*c < VC_LEN as u8);
+            unsafe {
+                for x in 0..4 {
+                    //I thought this short circuit was be helpful, but apparently it's just faster to do the query
+                    //if ranges[x].l != ranges[x].h {
                     ranges[x] = self.constrain_range(*c, &ranges[x]);
                 }
             }
