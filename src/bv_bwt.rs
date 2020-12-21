@@ -713,14 +713,18 @@ impl BitVectorBWT {
             cut_kmer = kmer;
         }
 
-        //go through whatever remains in reverse; single iterator with checks is fastest
-        for c in cut_kmer.iter().rev() {
+        //first iterator checks inputs
+        for c in cut_kmer.iter() {
             assert!(*c < VC_LEN as u8);
-            unsafe {
-                for x in 0..4 {
-                    if ranges[x].l != ranges[x].h {
-                        ranges[x] = self.constrain_range(*c, &ranges[x]);
-                    }
+        }
+        //do each one individually with breaks, tends to be fastest since it's post-fix based
+        for x in 0..4 {
+            for c in cut_kmer.iter().rev() {
+                if ranges[x].l == ranges[x].h {
+                    break;
+                }
+                unsafe {
+                    ranges[x] = self.constrain_range(*c, &ranges[x]);
                 }
             }
         }
