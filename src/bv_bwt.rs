@@ -469,6 +469,7 @@ impl BitVectorBWT {
     #[inline]
     pub fn count_kmer(&self, kmer: &[u8]) -> u64 {
         //init to everything
+        assert!(kmer.iter().all(|&v| v < VC_LEN as u8));
         let mut ret: BWTRange;
         let cut_kmer: &[u8];
         
@@ -486,7 +487,6 @@ impl BitVectorBWT {
         
         //go through what remains in reverse
         for c in cut_kmer.iter().rev() {
-            assert!(*c < VC_LEN as u8);
             unsafe {
                 ret = self.constrain_range(*c, &ret);
             }
@@ -503,6 +503,7 @@ impl BitVectorBWT {
     #[inline]
     fn range_kmer(&self, kmer: &[u8]) -> BWTRange {
         //init to everything
+        assert!(kmer.iter().all(|&v| v < VC_LEN as u8));
         let mut ret: BWTRange = BWTRange {
             l: 0,
             h: self.total_size
@@ -510,7 +511,6 @@ impl BitVectorBWT {
         
         //must do full k-mer since cache doesn't exist yet
         for c in kmer.iter().rev() {
-            assert!(*c < VC_LEN as u8);
             unsafe {
                 ret = self.constrain_range(*c, &ret);
             }
@@ -569,6 +569,8 @@ impl BitVectorBWT {
     #[inline]
     pub fn prefix_kmer_noalloc(&self, kmer: &[u8], symbols: &[u8], counts: &mut [u64]) {
         //init to everything
+        assert!(kmer.iter().all(|&v| v < VC_LEN as u8));
+        assert!(symbols.iter().all(|&v| v < VC_LEN as u8));
         let mut ret: BWTRange;
         let cut_kmer: &[u8];
         
@@ -586,7 +588,6 @@ impl BitVectorBWT {
         
         //go through remaining sequence in reverse order
         for c in cut_kmer.iter().rev() {
-            assert!(*c < VC_LEN as u8);
             unsafe {
                 ret = self.constrain_range(*c, &ret);
             }
@@ -598,7 +599,6 @@ impl BitVectorBWT {
 
         //pre-pend the passed symbols as final counts
         for (i, c) in symbols.iter().enumerate() {
-            assert!(*c < VC_LEN as u8);
             let subrange = unsafe { self.constrain_range(*c, &ret) };
             counts[i] = subrange.h-subrange.l
         }
@@ -736,7 +736,6 @@ impl BitVectorBWT {
         
         //for unknown reasons, this is faster in practice; caching maybe?
         for c in cut_kmer.iter().rev() {
-            assert!(*c < VC_LEN as u8);
             unsafe {
                 for x in 0..4 {
                     //I thought this short circuit was be helpful, but apparently it's just faster to do the query
