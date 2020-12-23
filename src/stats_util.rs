@@ -33,7 +33,7 @@ pub fn calculate_bounded_median(in_array: &[u64], min_value: u64) -> u64 {
         0 => 0,
         1 => allowed_values[0],
         count => {
-            allowed_values.sort();
+            allowed_values.sort_unstable();
             allowed_values[(count as usize - 1) / 2]
         }
     }

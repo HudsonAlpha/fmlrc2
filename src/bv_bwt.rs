@@ -173,7 +173,7 @@ impl BitVectorBWT {
             .replace(", ]", "]")
             .replace(",]", "]");
         let header_dict: serde_json::Value = serde_json::from_str(&header_string)
-            .expect(&format!("Error while parsing header string: {:?}", header_string));
+            .unwrap_or_else(|_| panic!("Error while parsing header string: {:?}", header_string));
         let expected_length: u64 = header_dict["shape"][0].as_u64().unwrap();
         
         //check that the disk size matches our expectation
@@ -340,9 +340,9 @@ impl BitVectorBWT {
     fn get_cache_index(&self, arr: &[u8]) -> usize {
         assert!(arr.len() >= self.cache_k);
         let mut ret: usize = 0;
-        for i in 0..self.cache_k {
+        for arr_value in arr.iter().take(self.cache_k) {
             ret *= VC_LEN;
-            ret += arr[i] as usize;
+            ret += *arr_value as usize;
         }
         ret
     }
@@ -353,9 +353,9 @@ impl BitVectorBWT {
         assert!(arr.len() >= self.cache_k);
         let mut ret: usize = 0;
         //k-mer is reversed, so we need to iterate reversed
-        for i in (0..self.cache_k).rev() {
+        for arr_value in arr.iter().take(self.cache_k).rev() {
             ret *= VC_LEN;
-            ret += arr[i] as usize;
+            ret += *arr_value as usize;
         }
         ret
     }
@@ -365,13 +365,13 @@ impl BitVectorBWT {
     fn get_fixed_cache_index(&self, arr: &[u8]) -> [usize; 4] {
         assert!(arr.len() >= self.cache_k-1);
         let mut initial_value: usize = 0;
-        for i in 0..self.cache_k-1 {
+        for arr_value in arr.iter().take(self.cache_k-1) {
             initial_value *= VC_LEN;
-            initial_value += arr[i] as usize;
+            initial_value += *arr_value as usize;
         }
         let mut ret: [usize; 4] = [initial_value; 4];
-        for i in 0..4 {
-            ret[i] *= VC_LEN;
+        for cache_value in &mut ret {
+            *cache_value *= VC_LEN;
         }
         ret[0] += 1;
         ret[1] += 2;
@@ -598,8 +598,9 @@ impl BitVectorBWT {
         }
 
         //pre-pend the passed symbols as final counts
+        let mut subrange: BWTRange;
         for (i, c) in symbols.iter().enumerate() {
-            let subrange = unsafe { self.constrain_range(*c, &ret) };
+            subrange = unsafe { self.constrain_range(*c, &ret) };
             counts[i] = subrange.h-subrange.l
         }
     }
@@ -667,7 +668,7 @@ impl BitVectorBWT {
             */
         }
         //reverse complemented, so T G C A
-        let mut subrange = unsafe { self.constrain_range(5, &ret) };
+        let mut subrange: BWTRange = unsafe { self.constrain_range(5, &ret) };
         counts[0] = subrange.h-subrange.l;
         subrange = unsafe { self.constrain_range(3, &ret) };
         counts[1] = subrange.h-subrange.l;
@@ -715,7 +716,7 @@ impl BitVectorBWT {
             ];
             cut_kmer = &kmer[0..kmer.len()-self.cache_k+1];
         } else {
-            ranges = self.fixed_init.clone();
+            ranges = self.fixed_init;//.clone();
             cut_kmer = kmer;
         }
 
@@ -735,12 +736,17 @@ impl BitVectorBWT {
         */
         
         //for unknown reasons, this is faster in practice; caching maybe?
-        for c in cut_kmer.iter().rev() {
+        for &c in cut_kmer.iter().rev() {
             unsafe {
+                /*
                 for x in 0..4 {
                     //I thought this short circuit was be helpful, but apparently it's just faster to do the query
                     //if ranges[x].l != ranges[x].h {
                     ranges[x] = self.constrain_range(*c, &ranges[x]);
+                }
+                */
+                for range in &mut ranges {
+                    *range = self.constrain_range(c, range);
                 }
             }
         }
@@ -801,78 +807,85 @@ mod tests {
 
     #[test]
     fn test_simple_index() {
-        //strings "ACGT\nCCGG"
-        let seq = "TG$$CAGCCG";
-        let seq = Cursor::new(seq);
-        let vec = convert_to_vec(seq);
-        
-        let mut bwt = BitVectorBWT::new();
-        bwt.load_vector(vec);
-        
-        let expected_totals = vec![2, 1, 3, 3, 0, 1];
-        let expected_starts = vec![0, 2, 3, 6, 9, 9];
-        let expected_ends = vec![2, 3, 6, 9, 9, 10];
+        //test a small and a large cache to make sure we're using the cache AND ignoring the cache where appropriate
+        let cache_sizes: Vec<usize> = vec![2, 10];
+        for &cache_size in cache_sizes.iter() {
+            //strings "ACGT\nCCGG"
+            let seq = "TG$$CAGCCG";
+            let seq = Cursor::new(seq);
+            let vec = convert_to_vec(seq);
 
-        for i in 0..6 {
-            //make sure the total counts are correct
-            assert_eq!(bwt.get_total_counts(i as u8), expected_totals[i]);
-            assert_eq!(bwt.start_index[i], expected_starts[i]);
-            assert_eq!(bwt.end_index[i], expected_ends[i]);
+            println!("Testing with cache-size = {}", cache_size);
 
-            //basic count of all 1-mers characters (excluding '$' of course)
-            if i != 0 {
-                assert_eq!(bwt.count_kmer(&vec![i as u8]), expected_totals[i]);
+            //let mut bwt = BitVectorBWT::new();
+            let mut bwt = BitVectorBWT::with_cache_size(cache_size);
+            bwt.load_vector(vec);
+            
+            let expected_totals = vec![2, 1, 3, 3, 0, 1];
+            let expected_starts = vec![0, 2, 3, 6, 9, 9];
+            let expected_ends = vec![2, 3, 6, 9, 9, 10];
+
+            for i in 0..6 {
+                //make sure the total counts are correct
+                assert_eq!(bwt.get_total_counts(i as u8), expected_totals[i]);
+                assert_eq!(bwt.start_index[i], expected_starts[i]);
+                assert_eq!(bwt.end_index[i], expected_ends[i]);
+
+                //basic count of all 1-mers characters (excluding '$' of course)
+                if i != 0 {
+                    assert_eq!(bwt.count_kmer(&vec![i as u8]), expected_totals[i]);
+                }
             }
+
+            //make sure the fixed inits are correct
+            assert_eq!(bwt.fixed_init[0], BWTRange {l:expected_starts[1], h:expected_ends[1]});
+            assert_eq!(bwt.fixed_init[1], BWTRange {l:expected_starts[2], h:expected_ends[2]});
+            assert_eq!(bwt.fixed_init[2], BWTRange {l:expected_starts[3], h:expected_ends[3]});
+            assert_eq!(bwt.fixed_init[3], BWTRange {l:expected_starts[5], h:expected_ends[5]});
+
+            //original strings "ACGT\nCCGG"
+            //2-mers
+            assert_eq!(bwt.count_kmer(&vec![1, 2]), 1); //AC
+            assert_eq!(bwt.count_kmer(&vec![2, 3]), 2); //CG
+            assert_eq!(bwt.count_kmer(&vec![3, 5]), 1); //GT
+            assert_eq!(bwt.count_kmer(&vec![2, 2]), 1); //CC
+            assert_eq!(bwt.count_kmer(&vec![3, 3]), 1); //GG
+            assert_eq!(bwt.count_kmer(&vec![5, 3]), 0); //TG - not present
+
+            //3-mers
+            assert_eq!(bwt.count_kmer(&vec![1, 2, 3]), 1); //ACG
+            assert_eq!(bwt.count_kmer(&vec![2, 3, 5]), 1); //CGT
+            assert_eq!(bwt.count_kmer(&vec![2, 2, 3]), 1); //CCG
+            assert_eq!(bwt.count_kmer(&vec![2, 3, 3]), 1); //CGG
+            assert_eq!(bwt.count_kmer(&vec![2, 3, 1]), 0); //CGA - not present
+
+            //4-mers
+            assert_eq!(bwt.count_kmer(&vec![1, 2, 3, 5]), 1); //ACGT
+            assert_eq!(bwt.count_kmer(&vec![2, 2, 3, 3]), 1); //CCGG
+            assert_eq!(bwt.count_kmer(&vec![5, 5, 5, 5]), 0); //TTTT - not present
+
+            //prefix counters
+            assert_eq!(bwt.prefix_kmer(&vec![2], &vec![1, 2, 3, 5]), vec![1, 1, 0, 0]); //XC
+            assert_eq!(bwt.prefix_kmer(&vec![2, 3], &vec![1, 2, 3, 5]), vec![1, 1, 0, 0]); //XCG
+            assert_eq!(bwt.prefix_kmer(&vec![5, 5, 5, 5], &vec![1, 2, 3, 5]), vec![0, 0, 0, 0]); //XTTTT - absent
+
+            //prefix counts
+            let mut counts: Vec<u64> = vec![0, 0, 0, 0];
+            bwt.prefix_revkmer_noalloc_fixed(&vec![2], &mut counts);
+            assert_eq!(counts, vec![0, 0, 1, 1]);//XC (but rev-comped)
+            bwt.prefix_revkmer_noalloc_fixed(&vec![3, 2], &mut counts);
+            assert_eq!(counts, vec![0, 0, 1, 1]);//XCG (but rev-comped)
+            bwt.prefix_revkmer_noalloc_fixed(&vec![5, 5, 5, 5], &mut counts);
+            assert_eq!(counts, vec![0, 0, 0, 0]);//XTTTT
+            
+            //postfix counts
+            bwt.postfix_kmer_noalloc_fixed(&vec![2], &mut counts);
+            assert_eq!(counts, vec![0, 1, 2, 0]); //CC and CG
+            bwt.postfix_kmer_noalloc_fixed(&vec![2, 3], &mut counts);
+            assert_eq!(counts, vec![0, 0, 1, 1]); //CGG and CGT
+            bwt.postfix_kmer_noalloc_fixed(&vec![5, 5, 5, 5], &mut counts);
+            assert_eq!(counts, vec![0, 0, 0, 0]); //none
         }
-
-        //make sure the fixed inits are correct
-        assert_eq!(bwt.fixed_init[0], BWTRange {l:expected_starts[1], h:expected_ends[1]});
-        assert_eq!(bwt.fixed_init[1], BWTRange {l:expected_starts[2], h:expected_ends[2]});
-        assert_eq!(bwt.fixed_init[2], BWTRange {l:expected_starts[3], h:expected_ends[3]});
-        assert_eq!(bwt.fixed_init[3], BWTRange {l:expected_starts[5], h:expected_ends[5]});
-
-        //original strings "ACGT\nCCGG"
-        //2-mers
-        assert_eq!(bwt.count_kmer(&vec![1, 2]), 1); //AC
-        assert_eq!(bwt.count_kmer(&vec![2, 3]), 2); //CG
-        assert_eq!(bwt.count_kmer(&vec![3, 5]), 1); //GT
-        assert_eq!(bwt.count_kmer(&vec![2, 2]), 1); //CC
-        assert_eq!(bwt.count_kmer(&vec![3, 3]), 1); //GG
-        assert_eq!(bwt.count_kmer(&vec![5, 3]), 0); //TG - not present
-
-        //3-mers
-        assert_eq!(bwt.count_kmer(&vec![1, 2, 3]), 1); //ACG
-        assert_eq!(bwt.count_kmer(&vec![2, 3, 5]), 1); //CGT
-        assert_eq!(bwt.count_kmer(&vec![2, 2, 3]), 1); //CCG
-        assert_eq!(bwt.count_kmer(&vec![2, 3, 3]), 1); //CGG
-        assert_eq!(bwt.count_kmer(&vec![2, 3, 1]), 0); //CGA - not present
-
-        //4-mers
-        assert_eq!(bwt.count_kmer(&vec![1, 2, 3, 5]), 1); //ACGT
-        assert_eq!(bwt.count_kmer(&vec![2, 2, 3, 3]), 1); //CCGG
-        assert_eq!(bwt.count_kmer(&vec![5, 5, 5, 5]), 0); //TTTT - not present
-
-        //prefix counters
-        assert_eq!(bwt.prefix_kmer(&vec![2], &vec![1, 2, 3, 5]), vec![1, 1, 0, 0]); //XC
-        assert_eq!(bwt.prefix_kmer(&vec![2, 3], &vec![1, 2, 3, 5]), vec![1, 1, 0, 0]); //XCG
-        assert_eq!(bwt.prefix_kmer(&vec![5, 5, 5, 5], &vec![1, 2, 3, 5]), vec![0, 0, 0, 0]); //XTTTT - absent
-
-        //prefix counts
-        let mut counts: Vec<u64> = vec![0, 0, 0, 0];
-        bwt.prefix_revkmer_noalloc_fixed(&vec![2], &mut counts);
-        assert_eq!(counts, vec![0, 0, 1, 1]);//XC (but rev-comped)
-        bwt.prefix_revkmer_noalloc_fixed(&vec![3, 2], &mut counts);
-        assert_eq!(counts, vec![0, 0, 1, 1]);//XCG (but rev-comped)
-        bwt.prefix_revkmer_noalloc_fixed(&vec![5, 5, 5, 5], &mut counts);
-        assert_eq!(counts, vec![0, 0, 0, 0]);//XTTTT
-        
-        //postfix counts
-        bwt.postfix_kmer_noalloc_fixed(&vec![2], &mut counts);
-        assert_eq!(counts, vec![0, 1, 2, 0]); //CC and CG
-        bwt.postfix_kmer_noalloc_fixed(&vec![2, 3], &mut counts);
-        assert_eq!(counts, vec![0, 0, 1, 1]); //CGG and CGT
-        bwt.postfix_kmer_noalloc_fixed(&vec![5, 5, 5, 5], &mut counts);
-        assert_eq!(counts, vec![0, 0, 0, 0]); //none
     }
 
     #[test]

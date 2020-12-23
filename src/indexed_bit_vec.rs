@@ -126,6 +126,23 @@ impl IndexedBitVec {
         self.index[offset] + (self.bitvec[offset] & LOW_SET_FLAGS[pos & INDEX_LOWER_MASK as usize]).count_ones() as u64
     }
 
+    /// Performs a rank-1 query without bounds checking, returned the number of set bits up to but NOT including `pos`
+    /// # Arguments
+    /// * `pos` - the position to use for ranking
+    /// # Safety
+    /// If `pos` is outside the length of the bit vector, this will have undefined behavior.
+    /// # Examples
+    /// ```rust
+    /// # use fmlrc::indexed_bit_vec::IndexedBitVec;
+    /// # let mut ibv = IndexedBitVec::with_capacity(128);
+    /// # ibv.set_bit(64);
+    /// # let initial_rank=0;
+    /// # ibv.build_index(initial_rank);
+    /// unsafe {
+    ///   assert_eq!(ibv.rank(64), initial_rank);
+    ///   assert_eq!(ibv.rank(65), initial_rank+1);
+    /// }
+    /// ```
     #[inline]
     pub unsafe fn rank_unchecked(&self, pos:usize) -> u64 {
         let vec_offset: usize = pos >> INDEX_SHIFT;
