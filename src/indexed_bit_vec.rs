@@ -139,8 +139,8 @@ impl IndexedBitVec {
     /// # let initial_rank=0;
     /// # ibv.build_index(initial_rank);
     /// unsafe {
-    ///   assert_eq!(ibv.rank(64), initial_rank);
-    ///   assert_eq!(ibv.rank(65), initial_rank+1);
+    ///   assert_eq!(ibv.rank_unchecked(64), initial_rank);
+    ///   assert_eq!(ibv.rank_unchecked(65), initial_rank+1);
     /// }
     /// ```
     #[inline]
