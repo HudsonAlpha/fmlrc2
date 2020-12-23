@@ -7,7 +7,7 @@ extern crate needletail;
 
 use clap::{Arg, App, value_t, values_t};
 use log::{info, error};
-use needletail::parse_sequence_path;
+use needletail::parse_fastx_file;
 use std::fs::File;
 use std::sync::{Arc, mpsc};
 use threadpool::ThreadPool;
@@ -208,57 +208,60 @@ fn main() {
     let mut results_received: u64 = 0;
 
     info!("Starting read correction processes...");
-    let parsing_result = parse_sequence_path(
-        long_read_fn,
-        |_| {},
-        |record| {
-            if read_index >= begin_id && read_index < end_id {
-                //if we've filled our queue, then we should wait until we get some results back
-                if jobs_queued - results_received >= JOB_SLOTS {
-                    let rx_value: CorrectionResults = rx.recv().unwrap();
-                    if verbose_mode {
-                        info!("Job #{:?}: {:.2} -> {:.2}", rx_value.read_index, rx_value.avg_before, rx_value.avg_after);
+    match parse_fastx_file(&long_read_fn) {
+        Ok(mut fastx_reader) => {
+            while let Some(raw_record) = fastx_reader.next() {
+                let record = match raw_record {
+                    Ok(record) => { record },
+                    Err(e) => {
+                        error!("Invalid record while parsing long read file: {:?}", e);
+                        std::process::exit(exitcode::IOERR);
                     }
-                    match fasta_writer.write_correction(rx_value) {
-                        Ok(()) => {},
-                        Err(e) => {
-                            error!("Failed while writing read correction: {:?}", e);
-                            std::process::exit(exitcode::IOERR);
-                        }
-                    };
-                    results_received += 1;
-                    if results_received % UPDATE_INTERVAL == 0 {
-                        info!("Processed {} reads...", results_received);
-                    }
-                }
-
-                //clone the transmit channel and submit the pool job
-                let tx = tx.clone();
-                let arc_bwt = arc_bwt.clone();
-                let arc_params = arc_params.clone();
-                let read_data: LongReadFA = LongReadFA {
-                    read_index: jobs_queued,
-                    label: String::from_utf8((*record.id).to_vec()).unwrap(),
-                    seq: String::from_utf8((*record.seq).to_vec()).unwrap()
                 };
-                //println!("Submitting {:?}", jobs_queued);
-                pool.execute(move|| {
-                    let correction_results: CorrectionResults = correction_job(arc_bwt, read_data, arc_params);
-                    tx.send(correction_results).expect("channel will be there waiting for the pool");
-                });
-                jobs_queued += 1;
-            }
-            read_index += 1;
-        }
-    );
+                if read_index >= begin_id && read_index < end_id {
+                    //if we've filled our queue, then we should wait until we get some results back
+                    if jobs_queued - results_received >= JOB_SLOTS {
+                        let rx_value: CorrectionResults = rx.recv().unwrap();
+                        if verbose_mode {
+                            info!("Job #{:?}: {:.2} -> {:.2}", rx_value.read_index, rx_value.avg_before, rx_value.avg_after);
+                        }
+                        match fasta_writer.write_correction(rx_value) {
+                            Ok(()) => {},
+                            Err(e) => {
+                                error!("Failed while writing read correction: {:?}", e);
+                                std::process::exit(exitcode::IOERR);
+                            }
+                        };
+                        results_received += 1;
+                        if results_received % UPDATE_INTERVAL == 0 {
+                            info!("Processed {} reads...", results_received);
+                        }
+                    }
 
-    match parsing_result {
-        Ok(_) => {},
+                    //clone the transmit channel and submit the pool job
+                    let tx = tx.clone();
+                    let arc_bwt = arc_bwt.clone();
+                    let arc_params = arc_params.clone();
+                    let read_data: LongReadFA = LongReadFA {
+                        read_index: jobs_queued,
+                        label: String::from_utf8(record.id().to_vec()).unwrap(),
+                        seq: String::from_utf8(record.seq().to_vec()).unwrap()
+                    };
+                    //println!("Submitting {:?}", jobs_queued);
+                    pool.execute(move|| {
+                        let correction_results: CorrectionResults = correction_job(arc_bwt, read_data, arc_params);
+                        tx.send(correction_results).expect("channel will be there waiting for the pool");
+                    });
+                    jobs_queued += 1;
+                }
+                read_index += 1;
+            }
+        },
         Err(e) => {
-            error!("Failed to parse long read file: {:?}", e);
+            error!("Failed to open long read file: {:?}", e);
             std::process::exit(exitcode::IOERR);
         }
-    };
+    }
 
     while results_received < jobs_queued {
         let rx_value: CorrectionResults = rx.recv().unwrap();
