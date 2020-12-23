@@ -43,12 +43,10 @@ const fn build_stoi() -> [u8; 256] {
 /// ```
 #[inline]
 pub fn reverse_complement_i(seq: &[u8]) -> Vec<u8> {
-    let seq_len = seq.len();
-    let mut ret: Vec<u8> = vec![0; seq_len];
-    for (i, c) in seq.iter().rev().enumerate() {
-        ret[i] = COMPLEMENT_INT[*c as usize];
-    }
-    ret
+    seq.iter()
+        .rev() //reverse
+        .map(|&c| COMPLEMENT_INT[c as usize]) //complement
+        .collect::<Vec<u8>>() //collect and return
 }
 
 /// Helper function that converts a string to the corresponding Vec<u8> representation
@@ -63,12 +61,9 @@ pub fn reverse_complement_i(seq: &[u8]) -> Vec<u8> {
 /// ```
 #[inline]
 pub fn convert_stoi(seq: &str) -> Vec<u8> {
-    let seq_len = seq.len();
-    let mut ret: Vec<u8> = vec![0; seq_len];
-    for (i, c) in seq.bytes().enumerate() {
-        ret[i] = STRING_TO_INT[c as usize];
-    }
-    ret
+    seq.bytes()
+        .map(|c| STRING_TO_INT[c as usize])
+        .collect::<Vec<u8>>()
 }
 
 /// Helper function that converts an integer array to its corresponding String representation
@@ -83,12 +78,13 @@ pub fn convert_stoi(seq: &str) -> Vec<u8> {
 /// ```
 #[inline]
 pub fn convert_itos(iseq: &[u8]) -> String {
-    let seq_len = iseq.len();
-    let mut ret_vec: Vec<u8> = vec![0; seq_len];
-    for (i, v) in iseq.iter().enumerate() {
-        ret_vec[i] = INT_TO_STRING[*v as usize];
+    let ret_vec = iseq.iter()
+        .map(|&v| INT_TO_STRING[v as usize])
+        .collect::<Vec<u8>>();
+    unsafe {
+        //this is a no-alloc way to convert the collected Vec<u8> into a String
+        String::from_utf8_unchecked(ret_vec)
     }
-    String::from_utf8(ret_vec).unwrap()
 }
 
 #[cfg(test)]
@@ -114,5 +110,12 @@ mod tests {
         let test: Vec<u8> = vec![0, 1, 2, 3, 4, 5];
         let converted = convert_itos(&test);
         assert_eq!(&converted, "$ACGNT");
+    }
+
+    #[test]
+    fn test_reverse_complement_i() {
+        let seq: Vec<u8> = vec![0, 1, 2, 3, 4, 5]; //"$ACGNT"
+        let rev_comp = reverse_complement_i(&seq);
+        assert_eq!(rev_comp, vec![1, 4, 2, 3, 5, 0]); //"ANCGT$"
     }
 }
