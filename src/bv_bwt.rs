@@ -487,11 +487,11 @@ impl BitVectorBWT {
         
         //go through what remains in reverse
         for c in cut_kmer.iter().rev() {
-            unsafe {
-                ret = self.constrain_range(*c, &ret);
-            }
             if ret.h == ret.l {
                 return 0;
+            }
+            unsafe {
+                ret = self.constrain_range(*c, &ret);
             }
         }
 
