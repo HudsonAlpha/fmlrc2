@@ -369,10 +369,8 @@ impl BitVectorBWT {
             initial_value *= VC_LEN;
             initial_value += *arr_value as usize;
         }
-        let mut ret: [usize; 4] = [initial_value; 4];
-        for cache_value in &mut ret {
-            *cache_value *= VC_LEN;
-        }
+        //shift before array creation, then add in the final characters: A, C, G, T -> 1, 2, 3, 5
+        let mut ret: [usize; 4] = [initial_value*VC_LEN; 4];
         ret[0] += 1;
         ret[1] += 2;
         ret[2] += 3;
@@ -738,14 +736,9 @@ impl BitVectorBWT {
         //for unknown reasons, this is faster in practice; caching maybe?
         for &c in cut_kmer.iter().rev() {
             unsafe {
-                /*
-                for x in 0..4 {
-                    //I thought this short circuit was be helpful, but apparently it's just faster to do the query
-                    //if ranges[x].l != ranges[x].h {
-                    ranges[x] = self.constrain_range(*c, &ranges[x]);
-                }
-                */
                 for range in &mut ranges {
+                    //I thought this short circuit was be helpful, but apparently it's just faster to do the query
+                    //if range[x].l != range[x].h {
                     *range = self.constrain_range(c, range);
                 }
             }
