@@ -6,6 +6,7 @@ use fmlrc::bv_bwt::BitVectorBWT;
 use fmlrc::bwt_converter::convert_to_vec;
 use fmlrc::read_correction::bridge_kmers;
 use fmlrc::ropebwt2_util::create_bwt_from_strings;
+use fmlrc::stats_util::*;
 use fmlrc::string_util::*;
 
 fn get_constant_bwt() -> BitVectorBWT {
@@ -59,11 +60,11 @@ pub fn bench_count_kmer(c: &mut Criterion) {
         black_box(bwt.count_kmer(&altered_query));
     }));
 
-    c.bench_function("prefix_kmer", |b| b.iter(|| {
+    c.bench_function("prefix_kmer_noalloc", |b| b.iter(|| {
         black_box(bwt.prefix_kmer_noalloc(&query[1..], &vec![1, 2, 3, 5], &mut counts));
     }));
 
-    c.bench_function("absent_prefix_kmer", |b| b.iter(|| {
+    c.bench_function("absent_prefix_kmer_noalloc", |b| b.iter(|| {
         black_box(bwt.prefix_kmer_noalloc(&altered_query[1..], &vec![1, 2, 3, 5], &mut counts));
     }));
 
@@ -83,12 +84,44 @@ pub fn bench_fixed_counts(c: &mut Criterion) {
 
     //this is the correct sequence, alter it below
     let query = convert_stoi(&"AACGGATCAAGCTTACCAGTATTTACGT");
+    let altered_query = convert_stoi(&"AACGGATCAAGCTTACCAGTATTTACGA");
     let mut counts: Vec<u64> = vec![0; 4];
 
+    let mut rev_query: Vec<u8> = vec![0; query.len()-1];
+    for (i, c) in query[1..].iter().rev().enumerate() {
+        rev_query[i] = *c;
+    }
+    let mut rev_altered_query: Vec<u8> = vec![0; altered_query.len()-1];
+    for (i, c) in altered_query[1..].iter().rev().enumerate() {
+        rev_altered_query[i] = *c;
+    }
+
+    let subquery = &query[..query.len()-1];
     c.bench_function("postfix_kmer_noalloc_fixed", |b| b.iter(|| {
-        black_box(bwt.postfix_kmer_noalloc_fixed(&query[..query.len()-1], &mut counts));
+        black_box(bwt.postfix_kmer_noalloc_fixed(subquery, &mut counts));
+    }));
+
+    c.bench_function("absent_postfix_kmer_noalloc_fixed", |b| b.iter(|| {
+        black_box(bwt.postfix_kmer_noalloc_fixed(&altered_query, &mut counts));
+    }));
+
+    c.bench_function("prefix_revkmer_noalloc_fixed", |b| b.iter(|| {
+        black_box(bwt.prefix_revkmer_noalloc_fixed(&rev_query, &mut counts));
+    }));
+
+    c.bench_function("absent_prefix_revkmer_noalloc_fixed", |b| b.iter(|| {
+        black_box(bwt.prefix_revkmer_noalloc_fixed(&rev_altered_query, &mut counts));
     }));
 }
 
-criterion_group!(benches, bench_string_util, bench_count_kmer, bench_fixed_counts);
+pub fn bench_stats_util(c: &mut Criterion) {
+    let test: Vec<u64> = vec![3; 20000];
+    c.bench_function("calculate_bounded_median", |b| b.iter(|| {
+        for x in 0..7 {
+            black_box(calculate_bounded_median(&test, x));
+        }
+    }));
+}
+
+criterion_group!(benches, bench_string_util, bench_count_kmer, bench_fixed_counts, bench_stats_util);
 criterion_main!(benches);

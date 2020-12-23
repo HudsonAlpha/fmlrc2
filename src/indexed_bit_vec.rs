@@ -1,6 +1,44 @@
 
 use math::round;
 
+/*
+TODO: when rust allows loops in const functions, this will be preferred IMO
+const fn build_low_shift() -> [u64; 65] {
+    let mut ret: [u64; 65] = [0; 65];
+    for set_count in 1..64 {
+        ret[set_count] = 0xFFFF_FFFF_FFFF_FFFF >> (64 - set_count);
+    }
+    ret
+}
+const LOW_SET_FLAGS: [u64; 65] = build_low_shift();
+*/
+
+//interim hard set the low-set bits array, replace with above once fixed
+const LOW_SET_FLAGS: [u64; 65] = [
+    0x0000_0000_0000_0000,
+    0x0000_0000_0000_0001, 0x0000_0000_0000_0003, 0x0000_0000_0000_0007, 0x0000_0000_0000_000F,
+    0x0000_0000_0000_001F, 0x0000_0000_0000_003F, 0x0000_0000_0000_007F, 0x0000_0000_0000_00FF,
+    0x0000_0000_0000_01FF, 0x0000_0000_0000_03FF, 0x0000_0000_0000_07FF, 0x0000_0000_0000_0FFF,
+    0x0000_0000_0000_1FFF, 0x0000_0000_0000_3FFF, 0x0000_0000_0000_7FFF, 0x0000_0000_0000_FFFF,
+    0x0000_0000_0001_FFFF, 0x0000_0000_0003_FFFF, 0x0000_0000_0007_FFFF, 0x0000_0000_000F_FFFF,
+    0x0000_0000_001F_FFFF, 0x0000_0000_003F_FFFF, 0x0000_0000_007F_FFFF, 0x0000_0000_00FF_FFFF,
+    0x0000_0000_01FF_FFFF, 0x0000_0000_03FF_FFFF, 0x0000_0000_07FF_FFFF, 0x0000_0000_0FFF_FFFF,
+    0x0000_0000_1FFF_FFFF, 0x0000_0000_3FFF_FFFF, 0x0000_0000_7FFF_FFFF, 0x0000_0000_FFFF_FFFF,
+    0x0000_0001_FFFF_FFFF, 0x0000_0003_FFFF_FFFF, 0x0000_0007_FFFF_FFFF, 0x0000_000F_FFFF_FFFF,
+    0x0000_001F_FFFF_FFFF, 0x0000_003F_FFFF_FFFF, 0x0000_007F_FFFF_FFFF, 0x0000_00FF_FFFF_FFFF,
+    0x0000_01FF_FFFF_FFFF, 0x0000_03FF_FFFF_FFFF, 0x0000_07FF_FFFF_FFFF, 0x0000_0FFF_FFFF_FFFF,
+    0x0000_1FFF_FFFF_FFFF, 0x0000_3FFF_FFFF_FFFF, 0x0000_7FFF_FFFF_FFFF, 0x0000_FFFF_FFFF_FFFF,
+    0x0001_FFFF_FFFF_FFFF, 0x0003_FFFF_FFFF_FFFF, 0x0007_FFFF_FFFF_FFFF, 0x000F_FFFF_FFFF_FFFF,
+    0x001F_FFFF_FFFF_FFFF, 0x003F_FFFF_FFFF_FFFF, 0x007F_FFFF_FFFF_FFFF, 0x00FF_FFFF_FFFF_FFFF,
+    0x01FF_FFFF_FFFF_FFFF, 0x03FF_FFFF_FFFF_FFFF, 0x07FF_FFFF_FFFF_FFFF, 0x0FFF_FFFF_FFFF_FFFF,
+    0x1FFF_FFFF_FFFF_FFFF, 0x3FFF_FFFF_FFFF_FFFF, 0x7FFF_FFFF_FFFF_FFFF, 0xFFFF_FFFF_FFFF_FFFF,
+];
+
+/// the number of bits to shift out when finding the index
+const INDEX_SHIFT: usize = 6;
+/// the flag for selecting
+const INDEX_LOWER_MASK: u64 = LOW_SET_FLAGS[INDEX_SHIFT];
+
 /// Represents a bit vector with an very fast index on top of it.
 /// For a vector of length N, the index takes up O(N) bits.
 pub struct IndexedBitVec {
@@ -40,13 +78,13 @@ impl IndexedBitVec {
     /// ```
     #[inline]
     pub fn set_bit(&mut self, pos: usize) {
-        self.bitvec[pos >> 6] |= 0x1 << (pos & 0x3F);
+        self.bitvec[pos >> INDEX_SHIFT] |= 0x1 << (pos & INDEX_LOWER_MASK as usize);
     }
 
     /// Currently, this function is strictly for testing
     #[inline]
     pub fn get_bit(&mut self, pos: usize) -> bool {
-        ((self.bitvec[pos >> 6] >> (pos & 0x3F)) & 0x1) != 0
+        ((self.bitvec[pos >> INDEX_SHIFT] >> (pos & INDEX_LOWER_MASK as usize)) & 0x1) != 0
     }
 
     /// Builds an index for the array to perform rank queries.
@@ -84,21 +122,31 @@ impl IndexedBitVec {
     /// ```
     #[inline]
     pub fn rank(&self, pos: usize) -> u64 {
-        //this was the original approach in fmlrc ported to rust
-        //self.index[pos >> 6] + ((self.bitvec[pos >> 6] << (!pos & 0x3f)) << 1).count_ones() as u64
-        //interestingly, the following match method is actually ~5% faster on average
-        match pos & 0x3f {
-            0 => self.index[pos >> 6],
-            r => self.index[pos >> 6] + (self.bitvec[pos >> 6] << (64-r)).count_ones() as u64
-        }
+        let offset: usize = pos >> INDEX_SHIFT;
+        self.index[offset] + (self.bitvec[offset] & LOW_SET_FLAGS[pos & INDEX_LOWER_MASK as usize]).count_ones() as u64
     }
 
+    /// Performs a rank-1 query without bounds checking, returned the number of set bits up to but NOT including `pos`
+    /// # Arguments
+    /// * `pos` - the position to use for ranking
+    /// # Safety
+    /// If `pos` is outside the length of the bit vector, this will have undefined behavior.
+    /// # Examples
+    /// ```rust
+    /// # use fmlrc::indexed_bit_vec::IndexedBitVec;
+    /// # let mut ibv = IndexedBitVec::with_capacity(128);
+    /// # ibv.set_bit(64);
+    /// # let initial_rank=0;
+    /// # ibv.build_index(initial_rank);
+    /// unsafe {
+    ///   assert_eq!(ibv.rank_unchecked(64), initial_rank);
+    ///   assert_eq!(ibv.rank_unchecked(65), initial_rank+1);
+    /// }
+    /// ```
     #[inline]
     pub unsafe fn rank_unchecked(&self, pos:usize) -> u64 {
-        match pos & 0x3f {
-            0 => *self.index.get_unchecked(pos >> 6),
-            r => self.index.get_unchecked(pos >> 6) + (self.bitvec.get_unchecked(pos >> 6) << (64-r)).count_ones() as u64
-        }
+        let vec_offset: usize = pos >> INDEX_SHIFT;
+        self.index.get_unchecked(vec_offset) + (self.bitvec.get_unchecked(vec_offset) & LOW_SET_FLAGS.get_unchecked(pos & INDEX_LOWER_MASK as usize)).count_ones() as u64
     }
 }
 
