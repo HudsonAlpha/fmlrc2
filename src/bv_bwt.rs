@@ -808,7 +808,7 @@ mod tests {
     #[test]
     fn test_simple_index() {
         //test a small and a large cache to make sure we're using the cache AND ignoring the cache where appropriate
-        let cache_sizes: Vec<usize> = vec![2, 10];
+        let cache_sizes: Vec<usize> = vec![2, 8];
         for &cache_size in cache_sizes.iter() {
             //strings "ACGT\nCCGG"
             let seq = "TG$$CAGCCG";
