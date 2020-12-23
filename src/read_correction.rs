@@ -367,14 +367,13 @@ fn pick_best_levenshtein_search(original: &[u8], candidates: Vec<Vec<u8>>, bwt: 
     }
     
     //get everything with a good score
-    let mut candidates_ed: Vec<Vec<u8>> = Vec::<Vec<u8>>::with_capacity(candidates.len());
+    let mut candidates_ed: Vec<&[u8]> = Vec::<&[u8]>::with_capacity(candidates.len());
     for y in 0..candidates.len() {
         match &ed_scores[y] {
             Some(eds) => {
                 if eds.k == min_score {
                     //we have to truncate down to the match end
-                    let truncated: Vec<u8> = candidates[y][0..eds.end].to_vec();
-                    candidates_ed.push(truncated);
+                    candidates_ed.push(&candidates[y][0..eds.end]);
                 }
             },
             None => {}
@@ -387,7 +386,7 @@ fn pick_best_levenshtein_search(original: &[u8], candidates: Vec<Vec<u8>>, bwt: 
     }
     else if candidates_ed.len() == 1 {
         //only one with smallest edit distance
-        Some(candidates_ed.remove(0))
+        Some(candidates_ed[0].to_vec())
     }
     else {
         //figure out which of the ones with equal edit distance has the most counts
@@ -396,7 +395,7 @@ fn pick_best_levenshtein_search(original: &[u8], candidates: Vec<Vec<u8>>, bwt: 
         let mut ed_pu: Vec<u64>;
         let mut summation: u64;
         for (y, candidate) in candidates_ed.iter().enumerate() {
-            ed_pu = bwt.count_pileup(&candidate, kmer_size);
+            ed_pu = bwt.count_pileup(candidate, kmer_size);
             summation = ed_pu.iter().sum();
             if summation > max_counts {
                 max_id = y;
@@ -405,7 +404,7 @@ fn pick_best_levenshtein_search(original: &[u8], candidates: Vec<Vec<u8>>, bwt: 
         }
 
         //now return the best candidate
-        Some(candidates_ed.remove(max_id))
+        Some(candidates_ed[max_id].to_vec())
     }
 }
 
@@ -430,25 +429,22 @@ fn pick_best_levenshtein(original: &[u8], candidates: Vec<Vec<u8>>, bwt: &BitVec
     }
     else {
         //we have multiple values, so check for edit distance
-        let mut ed_scores: Vec<u32> = Vec::<u32>::with_capacity(candidates.len());
-        for candidate in candidates.iter() {
-            //calculate the min distance
-            let score: u32 = levenshtein_exp(&original, &candidate);
-            ed_scores.push(score);
-        }
+        let ed_scores: Vec<u32> = candidates.iter()
+            .map(|candidate| levenshtein_exp(&original, &candidate))
+            .collect::<Vec<u32>>(); 
         let min_score: u32 = *ed_scores.iter().min().unwrap();
 
         //get everything with a good score
-        let mut candidates_ed: Vec<Vec<u8>> = Vec::<Vec<u8>>::with_capacity(candidates.len());
+        let mut candidates_ed: Vec<&Vec<u8>> = Vec::<&Vec<u8>>::with_capacity(candidates.len());
         for y in 0..candidates.len() {
             if ed_scores[y] == min_score {
-                candidates_ed.push(candidates[y].clone());
+                candidates_ed.push(&candidates[y]);
             }
         }
 
         if candidates_ed.len() == 1 {
             //only one with smallest edit distance
-            Some(candidates_ed.remove(0))
+            Some(candidates_ed[0].clone())
         }
         else {
             //TODO: is pileup or random better here?
@@ -458,7 +454,7 @@ fn pick_best_levenshtein(original: &[u8], candidates: Vec<Vec<u8>>, bwt: &BitVec
             let mut ed_pu: Vec<u64>;
             let mut summation: u64;
             for (y, candidate) in candidates_ed.iter().enumerate() {
-                ed_pu = bwt.count_pileup(&candidate, kmer_size);
+                ed_pu = bwt.count_pileup(candidate, kmer_size);
                 summation = ed_pu.iter().sum();
                 if summation > max_counts {
                     max_id = y;
@@ -467,7 +463,7 @@ fn pick_best_levenshtein(original: &[u8], candidates: Vec<Vec<u8>>, bwt: &BitVec
             }
 
             //now return the best candidate
-            Some(candidates_ed.remove(max_id))
+            Some(candidates_ed[max_id].clone())
         }
     }
 }
