@@ -1,3 +1,7 @@
+[![Crates.io](https://img.shields.io/crates/d/fmlrc.svg)](https://crates.io/crates/fmlrc)
+[![Crates.io](https://img.shields.io/crates/v/fmlrc.svg)](https://crates.io/crates/fmlrc)
+[![Crates.io](https://img.shields.io/crates/l/fmlrc.svg)](https://crates.io/crates/fmlrc)
+
 # rust-fmlrc
 
 This repo contains the source code for FMLRC v2, based on the same methodology used by the original [FMLRC](https://github.com/holtjma/fmlrc).  In benchmarks, the results between FMLRC v1 and v2 are nearly identical, but tests have shown that v2 uses approximately 50% of the run and CPU time compared to v1.
