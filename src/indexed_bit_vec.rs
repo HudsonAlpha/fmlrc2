@@ -41,10 +41,18 @@ const INDEX_LOWER_MASK: u64 = LOW_SET_FLAGS[INDEX_SHIFT];
 
 /// Represents a bit vector with an very fast index on top of it.
 /// For a vector of length N, the index takes up O(N) bits.
+
+#[derive(Clone,Default)]
+pub struct BitVecBlock {
+    pub bits: u64,
+    pub index: u64
+}
+
 pub struct IndexedBitVec {
     index_size: usize,
-    bitvec: Vec<u64>,
-    index: Vec<u64>
+    //bitvec: Vec<u64>,
+    //index: Vec<u64>
+    data_vec: Vec<BitVecBlock>
 }
 
 impl IndexedBitVec {
@@ -59,11 +67,12 @@ impl IndexedBitVec {
     #[inline]
 	pub fn with_capacity(size: usize) -> Self {
         let index_size: usize = (round::ceil((size as f64) / 64.0, 0) as usize)+1;
-        let bitvec = vec![0; index_size];
+        //let bitvec = vec![0; index_size];
 		Self {
             index_size,
-            bitvec,
-            index: vec![0; index_size]
+            //bitvec,
+            //index: vec![0; index_size]
+            data_vec: vec![Default::default(); index_size]
         }
     }
 
@@ -78,13 +87,15 @@ impl IndexedBitVec {
     /// ```
     #[inline]
     pub fn set_bit(&mut self, pos: usize) {
-        self.bitvec[pos >> INDEX_SHIFT] |= 0x1 << (pos & INDEX_LOWER_MASK as usize);
+        //self.bitvec[pos >> INDEX_SHIFT] |= 0x1 << (pos & INDEX_LOWER_MASK as usize);
+        self.data_vec[pos >> INDEX_SHIFT].bits |= 0x1 << (pos & INDEX_LOWER_MASK as usize);
     }
 
     /// Currently, this function is strictly for testing
     #[inline]
     pub fn get_bit(&mut self, pos: usize) -> bool {
-        ((self.bitvec[pos >> INDEX_SHIFT] >> (pos & INDEX_LOWER_MASK as usize)) & 0x1) != 0
+        //((self.bitvec[pos >> INDEX_SHIFT] >> (pos & INDEX_LOWER_MASK as usize)) & 0x1) != 0
+        ((self.data_vec[pos >> INDEX_SHIFT].bits >> (pos & INDEX_LOWER_MASK as usize)) & 0x1) != 0
     }
 
     /// Builds an index for the array to perform rank queries.
@@ -100,11 +111,15 @@ impl IndexedBitVec {
     /// ```
     pub fn build_index(&mut self, initial_rank: u64) {
         let mut current_rank = initial_rank;
-        for (i, bv_val) in self.bitvec.iter().enumerate().take(self.index_size-1) {
-            self.index[i] = current_rank;
-            current_rank += bv_val.count_ones() as u64
+        //for (i, bv_val) in self.bitvec.iter().enumerate().take(self.index_size-1) {
+        for bv_val in self.data_vec.iter_mut().take(self.index_size-1) {
+            //self.index[i] = current_rank;
+            bv_val.index = current_rank;
+            //current_rank += bv_val.count_ones() as u64;
+            current_rank += bv_val.bits.count_ones() as u64;
         }
-        self.index[self.index_size-1] = current_rank;
+        //self.index[self.index_size-1] = current_rank;
+        self.data_vec[self.index_size-1].index = current_rank;
     }
 
     /// Performs a rank-1 query, returned the number of set bits up to but NOT including `pos`
@@ -123,7 +138,8 @@ impl IndexedBitVec {
     #[inline]
     pub fn rank(&self, pos: usize) -> u64 {
         let offset: usize = pos >> INDEX_SHIFT;
-        self.index[offset] + (self.bitvec[offset] & LOW_SET_FLAGS[pos & INDEX_LOWER_MASK as usize]).count_ones() as u64
+        //self.index[offset] + (self.bitvec[offset] & LOW_SET_FLAGS[pos & INDEX_LOWER_MASK as usize]).count_ones() as u64
+        self.data_vec[offset].index + (self.data_vec[offset].bits & LOW_SET_FLAGS[pos & INDEX_LOWER_MASK as usize]).count_ones() as u64
     }
 
     /// Performs a rank-1 query without bounds checking, returned the number of set bits up to but NOT including `pos`
@@ -146,25 +162,26 @@ impl IndexedBitVec {
     #[inline]
     pub unsafe fn rank_unchecked(&self, pos:usize) -> u64 {
         let vec_offset: usize = pos >> INDEX_SHIFT;
-        self.index.get_unchecked(vec_offset) + (self.bitvec.get_unchecked(vec_offset) & LOW_SET_FLAGS.get_unchecked(pos & INDEX_LOWER_MASK as usize)).count_ones() as u64
+        //self.index.get_unchecked(vec_offset) + (self.bitvec.get_unchecked(vec_offset) & LOW_SET_FLAGS.get_unchecked(pos & INDEX_LOWER_MASK as usize)).count_ones() as u64
+        self.data_vec.get_unchecked(vec_offset).index + (self.data_vec.get_unchecked(vec_offset).bits & LOW_SET_FLAGS.get_unchecked(pos & INDEX_LOWER_MASK as usize)).count_ones() as u64
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
+    
     #[test]
     fn test_allocation() {
         //just test index allocation at the corners
         let ibv = IndexedBitVec::with_capacity(63);
-        assert_eq!(ibv.index.len(), 2);
+        assert_eq!(ibv.data_vec.len(), 2);
         let ibv = IndexedBitVec::with_capacity(64);
-        assert_eq!(ibv.index.len(), 2);
+        assert_eq!(ibv.data_vec.len(), 2);
         let ibv = IndexedBitVec::with_capacity(65);
-        assert_eq!(ibv.index.len(), 3);
+        assert_eq!(ibv.data_vec.len(), 3);
     }
-
+    
     #[test]
     fn test_set_bit() {
         //array with 128 "1"s, then 128 "0"s, then 1 "1"
@@ -184,17 +201,17 @@ mod tests {
         assert_eq!(ibv.get_bit(256), true);
 
         //check that our slicing is correct also
-        let slice: &[u64] = ibv.bitvec.as_slice();
+        let slice: &[BitVecBlock] = ibv.data_vec.as_slice();
         assert_eq!(slice.len(), 6);
         for i in 0..2 {
-            assert_eq!(slice[i], 0xffffffffffffffff);
+            assert_eq!(slice[i].bits, 0xffffffffffffffff);
         }
         for i in 2..4 {
-            assert_eq!(slice[i], 0x0);
+            assert_eq!(slice[i].bits, 0x0);
         }
-        assert_eq!(slice[4], 0x1)
+        assert_eq!(slice[4].bits, 0x1)
     }
-
+    
     #[test]
     fn test_indexing() {
         //array with 128 "1"s, then 128 "0"s, then 1 "1"
@@ -205,11 +222,11 @@ mod tests {
         ibv.set_bit(256);
 
         ibv.build_index(0);
-        let slice: &[u64] = ibv.index.as_slice();
+        let slice: &[BitVecBlock] = ibv.data_vec.as_slice();
         assert_eq!(slice.len(), 6);
         let counts = vec![0, 64, 128, 128, 128, 129];
         for i in 0..slice.len() {
-            assert_eq!(counts[i], slice[i]);
+            assert_eq!(counts[i], slice[i].index);
         }
 
         //progressively adding bits
@@ -217,11 +234,11 @@ mod tests {
         for i in 0..64 {
             ibv.set_bit(i);
             ibv.build_index(0);
-            let slice: &[u64] = ibv.index.as_slice();
-            assert_eq!(slice[1], (i+1) as u64);
+            let slice: &[BitVecBlock] = ibv.data_vec.as_slice();
+            assert_eq!(slice[1].index, (i+1) as u64);
         }
     }
-
+    
     #[test]
     fn test_offset() {
         //progressively adding bits
@@ -230,8 +247,8 @@ mod tests {
             ibv.set_bit(i);
         }
         ibv.build_index(100);
-        let slice: &[u64] = ibv.index.as_slice();
-        assert_eq!(slice[1], 164);
+        let slice: &[BitVecBlock] = ibv.data_vec.as_slice();
+        assert_eq!(slice[1].index, 164);
     }
 
     #[test]

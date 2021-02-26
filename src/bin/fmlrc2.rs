@@ -73,7 +73,7 @@ fn main() {
             .short("m")
             .long("min_count")
             .takes_value(true)
-            .help("absolute minimum k-mer count to consisder a path (default: 5)"))
+            .help("absolute minimum k-mer count to consider a path (default: 5)"))
         .arg(Arg::with_name("min_frac")
             .short("f")
             .long("min_dynamic_count")
@@ -178,7 +178,7 @@ fn main() {
         min_count,
         max_branch_attempt_length: 10000,
         branch_limit_factor: branch_factor,
-        branch_buffer_factor: 1.3, //1.4 has been better in my tests, maybe add in notes
+        branch_buffer_factor: 1.4, //1.4 has been better in my tests, maybe add in notes
         //TODO: make this 0.4 a CLI param? we did a prelim test with 0.3 and prec/recall went up but total indels/subs went up *shrug*
         midpoint_ed_factor: 0.4,
         tail_buffer_factor: 1.05,
