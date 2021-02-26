@@ -1,3 +1,6 @@
 /target
 **/*.rs.bk
 *.DS_Store
+run_benchmark.sh
+src/read_correction_WFA_backup.rs
+
