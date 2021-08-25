@@ -30,7 +30,7 @@ jobs:
           profile: minimal
           toolchain: stable
           override: true
-      - run: git clone https://github.com/lh3/ropebwt2.git && cd ropebwt2 && make && cd .. && export PATH=${PATH}:./ropebwt2/ropebwt2 && ropebwt -h
+      - run: git clone https://github.com/lh3/ropebwt2.git && cd ropebwt2 && make && cd .. && export PATH=${PATH}:./ropebwt2/ropebwt2 && ropebwt2 -h
       - uses: actions-rs/cargo@v1
         with:
           command: test
