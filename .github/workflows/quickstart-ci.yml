@@ -22,6 +22,7 @@ jobs:
   test:
     name: Test Suite
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
@@ -29,7 +30,7 @@ jobs:
           profile: minimal
           toolchain: stable
           override: true
-      - run: git clone https://github.com/lh3/ropebwt2.git && cd ropebwt2 && make && cd .. && export PATH=${PATH}:./ropebwt2/ropebwt2
+      - run: git clone https://github.com/lh3/ropebwt2.git && cd ropebwt2 && make && cd .. && export PATH=${PATH}:./ropebwt2/ropebwt2 && ropebwt -h
       - uses: actions-rs/cargo@v1
         with:
           command: test
