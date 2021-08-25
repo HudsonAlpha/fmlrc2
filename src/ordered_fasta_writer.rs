@@ -88,7 +88,7 @@ impl <W: io::Write> OrderedFastaWriter<W> {
         while !self.map_store.is_empty() {
             match self.map_store.remove(&self.current_index) {
                 Some(correction) => {
-                    let record: fasta::Record = fasta::Record::with_attrs(&correction.label, None, &correction.corrected_seq.as_bytes());
+                    let record: fasta::Record = fasta::Record::with_attrs(&correction.label, None, correction.corrected_seq.as_bytes());
                     match self.writer.write_record(&record) {
                         Ok(()) => {},
                         Err(e) => return Err(e)

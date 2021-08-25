@@ -1,6 +1,7 @@
 [![Crates.io](https://img.shields.io/crates/d/fmlrc.svg)](https://crates.io/crates/fmlrc)
 [![Crates.io](https://img.shields.io/crates/v/fmlrc.svg)](https://crates.io/crates/fmlrc)
 [![Crates.io](https://img.shields.io/crates/l/fmlrc.svg)](https://crates.io/crates/fmlrc)
+[![Build status](https://github.com/HudsonAlpha/rust-fmrlc/actions/workflows/quickstart-ci.yml/badge.svg)](https://github.com/HudsonAlpha/rust-fmlrc/actions)
 
 # rust-fmlrc
 
@@ -81,12 +82,12 @@ The actual corrections are _nearly_ identical (there are slight differences not 
 However, FMLRC v2 runs in less than half the time from both real time and CPU time perspectives. 
 While not explicitly measured, FMLRC v2 does use ~1GB of extra memory due to the 10-mer cache (`-C 10`).
 
-| Metric | FMLRC v1.0.0 | FMLRC2 v0.1.4 (`-C 10`) |
+| Metric | FMLRC v1.0.0 | FMLRC2 v0.1.5 (`-C 10`) |
 | - | - | - |
 | Recall | 0.9825 | 0.9826 |
 | Precision | 0.9815 | 0.9816 |
-| Real time | 7m29.908s | **2m57.711s** |
-| CPU time | 51m34.704s | **19m12.348s** |
+| Real time | 7m29.908s | **2m38.214s** |
+| CPU time | 51m34.704s | **17m54.289s** |
 
 ## Reference
 FMLRC v2 does not currently have a pre-print or paper. If you use FMLRC v2, please cite the FMLRC v1 paper:

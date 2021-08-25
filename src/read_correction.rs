@@ -215,7 +215,7 @@ pub fn correction_pass(bwt: &BitVectorBWT, seq_i: &[u8], params: &CorrectionPara
                         
                         //make sure to rev-comp the results here
                         for bp in &mut bridge_points {
-                            *bp = string_util::reverse_complement_i(&bp);
+                            *bp = string_util::reverse_complement_i(bp);
                         }
                     }
                     
@@ -336,7 +336,7 @@ fn pick_best_levenshtein_search(original: &[u8], candidates: Vec<Vec<u8>>, bwt: 
     let mut min_score: u32 = max_ed;
     for candidate in candidates.iter() {
         //calculate the min distance
-        let matches: Vec<Match> = levenshtein_search(&original, &candidate).collect();
+        let matches: Vec<Match> = levenshtein_search(original, candidate).collect();
         let mut best_match: Option<Match> = None;
         for m in matches {
             //make sure the start is index 0 and goes at least k long
@@ -430,7 +430,7 @@ fn pick_best_levenshtein(original: &[u8], candidates: Vec<Vec<u8>>, bwt: &BitVec
     else {
         //we have multiple values, so check for edit distance
         let ed_scores: Vec<u32> = candidates.iter()
-            .map(|candidate| levenshtein_exp(&original, &candidate))
+            .map(|candidate| levenshtein_exp(original, candidate))
             .collect::<Vec<u32>>(); 
         let min_score: u32 = *ed_scores.iter().min().unwrap();
 
