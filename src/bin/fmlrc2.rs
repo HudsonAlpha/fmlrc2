@@ -162,7 +162,7 @@ fn main() {
     info!("\tk-mer sizes: {:?}", kmer_sizes);
     info!("\tabs. mininimum count: {}", min_count);
     info!("\tdyn. minimimum fraction: {}", min_frac);
-    if min_frac < 0.0  || min_frac > 1.0 {
+    if !(0.0..=1.0).contains(&min_frac) {
         error!("--min_dynamic_count must be within the range [0, 1]");
         std::process::exit(exitcode::DATAERR);
     }

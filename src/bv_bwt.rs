@@ -91,9 +91,10 @@ impl BitVectorBWT {
     /// let mut bwt: BitVectorBWT = BitVectorBWT::with_cache_size(10);
     /// ```
     pub fn with_cache_size(cache_k: usize) -> Self {
-        let mut ret: BitVectorBWT = Default::default();
-        ret.cache_k = cache_k;
-        ret
+        BitVectorBWT {
+            cache_k,
+            ..Default::default()
+        }
     }
 
     /// Initializes the BWT from a compressed BWT vector.
@@ -637,7 +638,7 @@ impl BitVectorBWT {
 
         //check cache
         if rev_kmer.len() >= self.cache_k {
-            let cache_index: usize = self.get_rev_cache_index(&rev_kmer);
+            let cache_index: usize = self.get_rev_cache_index(rev_kmer);
             ret = self.kmer_cache[cache_index];
             cut_kmer = &rev_kmer[self.cache_k..];
         } else {
@@ -775,7 +776,7 @@ impl BitVectorBWT {
         }
 
         //get reverse complement
-        let rev_seq = string_util::reverse_complement_i(&seq);
+        let rev_seq = string_util::reverse_complement_i(seq);
         
         //build up return and count the k-mers
         let num_counts = seq_len - kmer_size + 1;
