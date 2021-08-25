@@ -1,6 +1,6 @@
 [package]
 name = "fmlrc"
-version = "0.1.4"
+version = "0.1.5"
 authors = ["holtjma <jholt@hudsonalpha.org>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
@@ -33,3 +33,6 @@ criterion = "0.3"
 [[bench]]
 name = "bv_bwt_benchmark"
 harness = false
+
+[profile.release]
+lto = true
