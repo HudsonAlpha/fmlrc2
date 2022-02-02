@@ -38,7 +38,7 @@ While it is generally competitive with the `ropebwt2` construction approach (see
 #### ropebwt2 Construction Approach
 If you are familiar with more complicated shell commands, then `ropebwt2` can also be used to build the BWT.  
 For _most_ short-read datasets, this approach is faster than `msbwt2-build` but also more complicated (multiple piped commands) and less flexible (fixed to FASTQ in the below example).
-Given one or more FASTQ files of accurate reads (`reads.fq.gz` with extras labeled as `[reads2.fq.gz ...]`), you can use the following command from this crate to create a BWT at `comp_msbwt.npy`.  
+Given one or more FASTQ files of accurate reads (`reads.fq.gz` with extras labeled as `[reads2.fq.gz ...]`), you can use the following command from this crate to create a BWT at `comp_msbwt.npy`.
 Note that this command requires the [ropebwt2](https://github.com/lh3/ropebwt2) executable to be installed:
 ```
 gunzip -c reads.fq.gz [reads2.fq.gz ...] | \
