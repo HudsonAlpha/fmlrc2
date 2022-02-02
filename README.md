@@ -29,12 +29,19 @@ cargo build --release
 ```
 
 ## Usage
-### MSBWT Building
-The Multi-String Burrows Wheeler Transform (MSBWT or BWT) must be build prior to read correction. FMLRC v2 uses the same data structure as v1, so the [original instructions](https://github.com/holtjma/fmlrc#building-the-short-read-bwt) can be used.
+### BWT Building
+#### msbwt2 Construction Approach
+For most users, it is recommended to use the [msbwt2](https://github.com/HudsonAlpha/rust-msbwt) crate to [build the BWT](https://github.com/HudsonAlpha/rust-msbwt#msbwt-building).
+This approach is generally simpler (requiring only one command) and more flexible (accepting both FASTQ and FASTA files at once).
+While it is generally competitive with the `ropebwt2` construction approach (see below) for memory and CPU usage, it is not parallelized and typically runs slower by wall-clock time.
 
-Given a FASTQ file of accurate reads (`reads.fq.gz`), you can also use the following command from this crate to create a BWT at `comp_msbwt.npy`.  Note that this command requires the [ropebwt2](https://github.com/lh3/ropebwt2) executable to be installed:
+#### ropebwt2 Construction Approach
+If you are familiar with more complicated shell commands, then `ropebwt2` can also be used to build the BWT.  
+For _most_ short-read datasets, this approach is faster than `msbwt2-build` but also more complicated (multiple piped commands) and less flexible (fixed to FASTQ in the below example).
+Given one or more FASTQ files of accurate reads (`reads.fq.gz` with extras labeled as `[reads2.fq.gz ...]`), you can use the following command from this crate to create a BWT at `comp_msbwt.npy`.  
+Note that this command requires the [ropebwt2](https://github.com/lh3/ropebwt2) executable to be installed:
 ```
-gunzip -c reads.fq.gz | \
+gunzip -c reads.fq.gz [reads2.fq.gz ...] | \
     awk 'NR % 4 == 2' | \
     sort | \
     tr NT TN | \
@@ -43,8 +50,7 @@ gunzip -c reads.fq.gz | \
     fmlrc2-convert comp_msbwt.npy
 ```
 
-#### Optional Construction Speedup
-If you are **only** using the BWT for correction, then the `sort` can be removed from the above command. This will reduce construction time significantly, but loses the read recovery property of the BWT.
+Note: If you are **only** using the BWT for correction, then the `sort` can be removed from the above command. This will reduce construction time significantly, but loses the read recovery property of the BWT.
 
 ### Correction
 Assuming the accurate-read BWT is built (`comp_msbwt.npy`) and uncorrected reads are available (fasta/fastq, gzip optional, `uncorrected.fq.gz`), invoking FMLRC v2 is fairly simple:
