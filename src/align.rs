@@ -17,24 +17,20 @@ use std::mem::swap;
 /// assert_eq!(edit_distance(&v1, &v3), 2);
 /// ```
 pub fn edit_distance(v1: &[u8], v2: &[u8]) -> usize {
-    let l1: usize = v1.len();
     let l2: usize = v2.len();
 
     let mut col: Vec<usize> = vec![0; l2+1];
-    let mut prev_col: Vec<usize> = vec![0; l2+1];
-    for i in 0..l2+1 {
-        prev_col[i] = i;
-    }
-    for i in 0..l1 {
+    let mut prev_col: Vec<usize> = (0..l2+1).collect();
+    for (i, &c1) in v1.iter().enumerate() {
         col[0] = i+1;
-        for j in 0..l2 {
+        for (j, &c2) in v2.iter().enumerate() {
             col[j+1] = min(
                 min(
                     prev_col[j+1]+1, 
                     col[j]+1
                 ), 
                 prev_col[j]+({
-                    if v1[i] == v2[j] {
+                    if c1 == c2 {
                         0
                     } else {
                         1
@@ -46,7 +42,7 @@ pub fn edit_distance(v1: &[u8], v2: &[u8]) -> usize {
         swap(&mut col, &mut prev_col);
     }
 
-    return prev_col[l2];
+    prev_col[l2]
 }
 
 /// Contains values for a partial match result
@@ -79,24 +75,20 @@ pub struct MatchScore {
 /// });
 /// ```
 pub fn edit_distance_minimize(v1: &[u8], v2: &[u8]) -> MatchScore {
-    let l1: usize = v1.len();
     let l2: usize = v2.len();
 
     let mut col: Vec<usize> = vec![0; l2+1];
-    let mut prev_col: Vec<usize> = vec![0; l2+1];
-    for i in 0..l2+1 {
-        prev_col[i] = i;
-    }
-    for i in 0..l1 {
+    let mut prev_col: Vec<usize> = (0..l2+1).collect();
+    for (i, &c1) in v1.iter().enumerate() {
         col[0] = i+1;
-        for j in 0..l2 {
+        for (j, &c2) in v2.iter().enumerate() {
             col[j+1] = min(
                 min(
                     prev_col[j+1]+1, 
                     col[j]+1
                 ), 
                 prev_col[j]+({
-                    if v1[i] == v2[j] {
+                    if c1 == c2 {
                         0
                     } else {
                         1

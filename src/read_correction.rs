@@ -337,7 +337,7 @@ fn pick_best_levenshtein_search(original: &[u8], candidates: Vec<Vec<u8>>, bwt: 
     
     //first calculate the best match for each candidate, and mark the minimum best score we find as we go
     for candidate in candidates.iter() {
-        let best_match: MatchScore = edit_distance_minimize(original, &candidate);
+        let best_match: MatchScore = edit_distance_minimize(original, candidate);
         min_score = min(best_match.score, min_score);
         ed_scores.push(best_match);
     }
@@ -402,7 +402,7 @@ fn pick_best_levenshtein(original: &[u8], candidates: Vec<Vec<u8>>, bwt: &BitVec
     else {
         //we have multiple values, so check for edit distance
         let ed_scores: Vec<usize> = candidates.iter()
-            .map(|candidate| edit_distance(original, &candidate))
+            .map(|candidate| edit_distance(original, candidate))
             .collect::<Vec<usize>>();
         let min_score: usize = *ed_scores.iter().min().unwrap();
 
