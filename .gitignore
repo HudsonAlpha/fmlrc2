@@ -1,6 +1,10 @@
 /target
 **/*.rs.bk
 *.DS_Store
+example
 run_benchmark.sh
+fmlrc1_benchmark.sh
+src/bv_bwt_002.rs
+src/indexed_bit_vec_002.rs
 src/read_correction_WFA_backup.rs
 
