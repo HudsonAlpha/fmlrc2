@@ -166,10 +166,10 @@ impl BitVectorBWT {
         
         //parse the header string for the expected length, requires a lot of manipulation of the string because of numpy header styling
         let header_string = String::from_utf8(skip_header).unwrap()
-            .replace("\'", "\"")
+            .replace('\'', "\"")
             .replace("False", "false")
-            .replace("(", "[")
-            .replace(")", "]")
+            .replace('(', "[")
+            .replace(')', "]")
             .replace(", }", "}")
             .replace(", ]", "]")
             .replace(",]", "]");
