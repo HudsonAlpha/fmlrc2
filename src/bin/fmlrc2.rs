@@ -27,9 +27,6 @@ fn main() {
     const UPDATE_INTERVAL: u64 = 10000;
     
     //this is the CLI block, params that get populated appear before
-    let bwt_fn: String;
-    let long_read_fn: String;
-    let corrected_read_fn: String;
     let mut kmer_sizes: Vec<usize> = vec![21, 59];
     let mut threads: usize = 1;
     let mut begin_id: u64 = 0;
@@ -38,7 +35,6 @@ fn main() {
     let mut min_frac: f64 = 0.1;
     let mut branch_factor: f64 = 4.0;
     let mut cache_size: usize = 8;
-    let verbose_mode: bool;
     
     let matches = App::new("FMLRC2")
         .version(VERSION.unwrap_or("?"))
@@ -104,12 +100,12 @@ fn main() {
         .get_matches();
     
     //pull out required values
-    bwt_fn = matches.value_of("COMP_MSBWT.NPY").unwrap().to_string();
-    long_read_fn = matches.value_of("LONG_READS.FA").unwrap().to_string();
-    corrected_read_fn = matches.value_of("CORRECTED_READS.FA").unwrap().to_string();
+    let bwt_fn: String = matches.value_of("COMP_MSBWT.NPY").unwrap().to_string();
+    let long_read_fn: String = matches.value_of("LONG_READS.FA").unwrap().to_string();
+    let corrected_read_fn: String = matches.value_of("CORRECTED_READS.FA").unwrap().to_string();
 
     //now check options
-    verbose_mode = matches.is_present("verbose_mode");
+    let verbose_mode: bool = matches.is_present("verbose_mode");
     kmer_sizes = values_t!(matches.values_of("kmer_sizes"), usize).unwrap_or(kmer_sizes);
     threads = value_t!(matches.value_of("threads"), usize).unwrap_or(threads);
     begin_id = value_t!(matches.value_of("begin_id"), u64).unwrap_or(begin_id);

@@ -1,6 +1,6 @@
 [package]
 name = "fmlrc"
-version = "0.1.5"
+version = "0.1.6"
 authors = ["holtjma <jholt@hudsonalpha.org>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
@@ -25,7 +25,6 @@ serde_json = "1.0.58"
 subprocess = "0.2.4"
 tempfile = "3.1.0"
 threadpool = "1.7.1"
-triple_accel = "0.3.4"
 
 [dev-dependencies]
 criterion = "0.3"

@@ -79,7 +79,7 @@ Thus far, all benchmarks have focused on a relatively small _E. coli_ dataset fo
 The files for this dataset can be found in the original [fmlrc example](https://github.com/holtjma/fmlrc/blob/master/example/run_example.sh).
 The exact same BWT and uncorrected long read files were used for both fmlrc v1 and fmlrc v2.
 [ELECTOR](https://github.com/kamimrcht/ELECTOR) was used to evaluate the results.
-All fmlrc executions were run on a Macbook Pro with 2.2 GHz Intel Core i7 processor (8 cores) with 16 GB of RAM.
+All fmlrc executions were run on a Macbook Pro with Apple M1 Pro processor (8 threads/processes used) with 16 GB of RAM.
 Run times were gathered using Mac OSX `time`.
 All parameters were set to defaults except for `-C 10` in FMLRC v2.
 
@@ -88,12 +88,12 @@ The actual corrections are _nearly_ identical (there are slight differences not 
 However, FMLRC v2 runs in less than half the time from both real time and CPU time perspectives. 
 While not explicitly measured, FMLRC v2 does use ~1GB of extra memory due to the 10-mer cache (`-C 10`).
 
-| Metric | FMLRC v1.0.0 | FMLRC2 v0.1.5 (`-C 10`) |
-| - | - | - |
-| Recall | 0.9825 | 0.9826 |
-| Precision | 0.9815 | 0.9816 |
-| Real time | 7m29.908s | **2m38.214s** |
-| CPU time | 51m34.704s | **17m54.289s** |
+| Metric | FMLRC v1.0.0 | FMLRC2 v0.1.5 (`-C 10`) | FMLRC2 v0.1.6 (`-C 10`) |
+| - | - | - | - |
+| Recall | 0.9830 | 0.9830 | 0.9830 |
+| Precision | 0.9821 | 0.9821 | 0.9821 |
+| Real time | 3m38.067s | 2m47.120s | **1m24.219s** |
+| CPU time | 27m23.652s | 18m54.873s | **8m49.680s** |
 
 ## Reference
 FMLRC v2 does not currently have a pre-print or paper. If you use FMLRC v2, please cite the FMLRC v1 paper:
