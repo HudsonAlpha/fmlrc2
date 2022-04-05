@@ -30,6 +30,8 @@ assert_eq!(kmer_count, 1);
 ```
 */
 
+/// Contains the alignment methods for comparing corrections
+pub mod align;
 /// Contains the bit vector implementation of the BWT
 pub mod bv_bwt;
 /// Contains the function for reformating a BWT string into the expected run-length format or numpy file

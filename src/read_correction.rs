@@ -1,9 +1,10 @@
 
 extern crate log;
 
+use std::cmp::min;
 use std::sync::Arc;
-use triple_accel::{levenshtein_exp,levenshtein_search,Match};
 
+use crate::align::{edit_distance,edit_distance_minimize,MatchScore};
 use crate::bv_bwt::BitVectorBWT;
 use crate::stats_util;
 use crate::string_util;
@@ -235,7 +236,7 @@ pub fn correction_pass(bwt: &BitVectorBWT, seq_i: &[u8], params: &CorrectionPara
                         //no bridges were found, try to extend into the midpoint (assuming no seed/target overlap)
                         let mid_point: usize = (prev_found as usize+x+kmer_size) / 2;
                         max_branch_length = (params.tail_buffer_factor*(mid_point - prev_found as usize) as f64) as usize;
-                        let max_edit_distance: u32 = ((mid_point - prev_found as usize) as f64 * params.midpoint_ed_factor) as u32;
+                        let max_edit_distance: usize = ((mid_point - prev_found as usize) as f64 * params.midpoint_ed_factor) as usize;
 
                         //extend left to midpoint
                         bridge_points = assemble_from_kmer(bwt, &seed_kmer, threshold, branch_limit, max_branch_length);
@@ -330,53 +331,24 @@ pub fn correction_pass(bwt: &BitVectorBWT, seq_i: &[u8], params: &CorrectionPara
 /// * `kmer_size` - the k-mer size to use for pileup tie-breaking
 /// * `max_ed` - the maximum allowed edit distance, set to 0xFFFFFFFF if anything goes
 #[inline]
-fn pick_best_levenshtein_search(original: &[u8], candidates: Vec<Vec<u8>>, bwt: &BitVectorBWT, kmer_size: usize, max_ed: u32) -> Option<Vec<u8>> {
-    let mut ed_scores: Vec<Option<Match>> = Vec::<Option<Match>>::with_capacity(candidates.len());
-    //let mut min_score: u32 = 0xFFFFFFFF;
-    let mut min_score: u32 = max_ed;
+fn pick_best_levenshtein_search(original: &[u8], candidates: Vec<Vec<u8>>, bwt: &BitVectorBWT, kmer_size: usize, max_ed: usize) -> Option<Vec<u8>> {
+    let mut ed_scores: Vec<MatchScore> = Vec::<MatchScore>::with_capacity(candidates.len());
+    let mut min_score: usize = max_ed as usize;
+    
+    //first calculate the best match for each candidate, and mark the minimum best score we find as we go
     for candidate in candidates.iter() {
-        //calculate the min distance
-        let matches: Vec<Match> = levenshtein_search(original, candidate).collect();
-        let mut best_match: Option<Match> = None;
-        for m in matches {
-            //make sure the start is index 0 and goes at least k long
-            if m.start == 0 && m.end >= kmer_size {
-                match &best_match {
-                    Some(bm) => {
-                        if m.k < bm.k || (m.k == bm.k && m.end < bm.end) {
-                            best_match = Some(m);
-                        }
-                    },
-                    None => {
-                        best_match = Some(m);
-                    }
-                }
-            }
-        }
-
-        //update the min score if we can
-        match &best_match {
-            Some(bm) => {
-                if bm.k < min_score {
-                    min_score = bm.k;
-                }
-            },
-            None => {}
-        }
+        let best_match: MatchScore = edit_distance_minimize(original, &candidate);
+        min_score = min(best_match.score, min_score);
         ed_scores.push(best_match);
     }
     
     //get everything with a good score
     let mut candidates_ed: Vec<&[u8]> = Vec::<&[u8]>::with_capacity(candidates.len());
     for y in 0..candidates.len() {
-        match &ed_scores[y] {
-            Some(eds) => {
-                if eds.k == min_score {
-                    //we have to truncate down to the match end
-                    candidates_ed.push(&candidates[y][0..eds.end]);
-                }
-            },
-            None => {}
+        let score = ed_scores[y].score;
+        let end_index = ed_scores[y].match_length;
+        if score == min_score {
+            candidates_ed.push(&candidates[y][0..end_index]);
         }
     }
 
@@ -429,10 +401,10 @@ fn pick_best_levenshtein(original: &[u8], candidates: Vec<Vec<u8>>, bwt: &BitVec
     }
     else {
         //we have multiple values, so check for edit distance
-        let ed_scores: Vec<u32> = candidates.iter()
-            .map(|candidate| levenshtein_exp(original, candidate))
-            .collect::<Vec<u32>>(); 
-        let min_score: u32 = *ed_scores.iter().min().unwrap();
+        let ed_scores: Vec<usize> = candidates.iter()
+            .map(|candidate| edit_distance(original, &candidate))
+            .collect::<Vec<usize>>();
+        let min_score: usize = *ed_scores.iter().min().unwrap();
 
         //get everything with a good score
         let mut candidates_ed: Vec<&Vec<u8>> = Vec::<&Vec<u8>>::with_capacity(candidates.len());
@@ -837,23 +809,6 @@ mod tests {
         let bridges = assemble_from_kmer(&bwt, &seed, min_count, branch_lim, max_branch_len);
         assert_eq!(bridges.len(), 1);
         assert_eq!(bridges[0], query);
-    }
-
-    #[test]
-    fn test_triple_accel() {
-        //this test is mostly just for my sanity of understanding the library
-        let query = convert_stoi(&"AACGGATCAAGCTTACCAGTATTTACGT");
-        let short_seq = convert_stoi(&"AACGGATGAA"); //one base change
-        let long_seq = convert_stoi(&"AACGGATCATAGCTTACCAGTATATACGT"); //one insert, one change
-
-        //use this one when we want to compare the full strings and get an edit distance
-        let l_dist = levenshtein_exp(&long_seq, &query);
-        assert_eq!(l_dist, 2);
-
-        //use this one when we need to do minimal head/tail corrections
-        let matches: Vec<Match> = levenshtein_search(&short_seq, &query).collect();
-        assert_eq!(matches.len(), 1);
-        assert_eq!(matches[0], Match{start: 0, end: 10, k: 1})
     }
 
     #[test]
