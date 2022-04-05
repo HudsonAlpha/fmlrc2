@@ -18,7 +18,6 @@ fn main() {
 
     //this is the CLI block, params that get populated appear before
     let mut in_fn: String = "stdin".to_string();
-    let bwt_fn: String;
 
     let matches = App::new("FMLRC2 BWT Converter")
         .version(VERSION.unwrap_or("?"))
@@ -36,7 +35,7 @@ fn main() {
         .get_matches();
     
     //pull out required values
-    bwt_fn = matches.value_of("COMP_MSBWT.NPY").unwrap().to_string();
+    let bwt_fn: String = matches.value_of("COMP_MSBWT.NPY").unwrap().to_string();
     
     //optional values
     in_fn = value_t!(matches.value_of("in_fn"), String).unwrap_or(in_fn);
