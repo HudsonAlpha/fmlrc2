@@ -125,10 +125,10 @@ pub fn bench_stats_util(c: &mut Criterion) {
 }
 
 pub fn bench_align(c: &mut Criterion) {
-    let v1: Vec<u8> = vec![0, 1, 2, 4, 5];
-    let v2: Vec<u8> = vec![0, 1, 3, 4, 5];
-    let v3: Vec<u8> = vec![1, 2, 3, 5];
-    let v4: Vec<u8> = vec![0, 1, 3, 4, 5, 4, 3, 2, 1, 2, 3, 4, 5];
+    let v1: Vec<u8> = vec![0, 1, 2, 4, 5, 0, 1, 2, 4, 5, 0, 1, 2, 4, 5, 0, 1, 2, 4, 5];
+    let v2: Vec<u8> = vec![0, 1, 3, 4, 5, 0, 1, 3, 4, 5, 0, 1, 3, 4, 5, 0, 1, 3, 4, 5];
+    let v3: Vec<u8> = vec![1, 2, 3, 5, 1, 2, 3, 5, 1, 2, 3, 5, 1, 2, 3, 5];
+    let v4: Vec<u8> = vec![0, 1, 3, 4, 5, 0, 1, 3, 4, 5, 0, 1, 3, 4, 5, 0, 1, 3, 4, 5, 0, 1, 3, 4, 5, 4, 3, 2, 1, 2, 3, 4, 5];
 
     c.bench_function("align_edit_distance", |b| b.iter(|| {
         black_box(edit_distance(&v1, &v1));
