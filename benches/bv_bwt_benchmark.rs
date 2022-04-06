@@ -2,6 +2,7 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use std::io::Cursor;
 
+use fmlrc::align::*;
 use fmlrc::bv_bwt::BitVectorBWT;
 use fmlrc::bwt_converter::convert_to_vec;
 use fmlrc::read_correction::bridge_kmers;
@@ -123,5 +124,32 @@ pub fn bench_stats_util(c: &mut Criterion) {
     }));
 }
 
-criterion_group!(benches, bench_string_util, bench_count_kmer, bench_fixed_counts, bench_stats_util);
+pub fn bench_align(c: &mut Criterion) {
+    let v1: Vec<u8> = vec![0, 1, 2, 4, 5];
+    let v2: Vec<u8> = vec![0, 1, 3, 4, 5];
+    let v3: Vec<u8> = vec![1, 2, 3, 5];
+    let v4: Vec<u8> = vec![0, 1, 3, 4, 5, 4, 3, 2, 1, 2, 3, 4, 5];
+
+    c.bench_function("align_edit_distance", |b| b.iter(|| {
+        black_box(edit_distance(&v1, &v1));
+        black_box(edit_distance(&v1, &v2));
+        black_box(edit_distance(&v1, &v3));
+    }));
+
+    c.bench_function("align_edit_distance_minimize", |b| b.iter(|| {
+        black_box(edit_distance(&v1, &v4));
+    }));
+
+    c.bench_function("align_wfa_ed", |b| b.iter(|| {
+        black_box(wfa_ed(&v1, &v1));
+        black_box(wfa_ed(&v1, &v2));
+        black_box(wfa_ed(&v1, &v3));
+    }));
+
+    c.bench_function("align_wfa_minimize", |b| b.iter(|| {
+        black_box(wfa_minimize(&v1, &v4));
+    }));
+}
+
+criterion_group!(benches, bench_string_util, bench_count_kmer, bench_fixed_counts, bench_stats_util, bench_align);
 criterion_main!(benches);
