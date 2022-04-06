@@ -137,7 +137,7 @@ pub fn bench_align(c: &mut Criterion) {
     }));
 
     c.bench_function("align_edit_distance_minimize", |b| b.iter(|| {
-        black_box(edit_distance(&v1, &v4));
+        black_box(edit_distance_minimize(&v1, &v4));
     }));
 
     c.bench_function("align_wfa_ed", |b| b.iter(|| {
