@@ -88,12 +88,12 @@ The actual corrections are _nearly_ identical (there are slight differences not 
 However, FMLRC v2 runs in less than half the time from both real time and CPU time perspectives. 
 While not explicitly measured, FMLRC v2 does use ~1GB of extra memory due to the 10-mer cache (`-C 10`).
 
-| Metric | FMLRC v1.0.0 | FMLRC2 v0.1.5 (`-C 10`) | FMLRC2 v0.1.6 (`-C 10`) |
+| Metric | FMLRC v1.0.0 | FMLRC2 v0.1.6 (`-C 10`) | FMLRC2 v0.1.7 (`-C 10`) |
 | - | - | - | - |
 | Recall | 0.9830 | 0.9830 | 0.9830 |
 | Precision | 0.9821 | 0.9821 | 0.9821 |
-| Real time | 3m38.067s | 2m47.120s | **1m24.219s** |
-| CPU time | 27m23.652s | 18m54.873s | **8m49.680s** |
+| Real time | 3m38.067s | 1m24.219s | **1m14.720s** |
+| CPU time | 27m23.652s | 8m49.680s | **8m15.823s** |
 
 ## Reference
 FMLRC v2 does not currently have a pre-print or paper. If you use FMLRC v2, please cite the FMLRC v1 paper:
