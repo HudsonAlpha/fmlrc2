@@ -211,12 +211,10 @@ pub fn wfa_minimize(v1: &[u8], v2: &[u8]) -> MatchScore {
     let mut edits = 0;
 
     //main idea is to iterate until we're at the end of v1, this is guaranteed because i abd j are monotonically increasing
-    //the loop condition is triggered because we're somewhere in v2 at this point, and it will generally be > 0 (unless a user is doing something real dumb)
-    let mut max_v2: usize = 0;
-    while max_v2 == 0 {
+    loop {
         //during each iteration, we go over all wavefronts; at iteration e, there are 2*e+1 current wavefronts that will generate 2*(e+1)+1 wavefronts
         //"e" in this context corresponds to the edit distance "edits"
-        for (wf_index, &wf) in curr_wf.iter().enumerate() {
+        for (wf_index, &wf) in curr_wf.iter().enumerate().rev() {
             let mut i = wf.0;
             let mut j = wf.1;
             
@@ -227,14 +225,16 @@ pub fn wfa_minimize(v1: &[u8], v2: &[u8]) -> MatchScore {
             }
             
             if i == l1 {
-                //we reached the end of v1, see if we are farther along v2 than prior findings
-                max_v2 = max(max_v2, j);
+                //we reached the end of v1, and since we are going in reverse order, this _must_ be the maximum 'j' value possible with this edit dist
+                return MatchScore {
+                    score: edits,
+                    match_length: j
+                }
             } else if j == l2 {
                 //we reached the end of v2, so j can no longer increase
                 next_wf[wf_index] = max(next_wf[wf_index], (i+1, j));
                 next_wf[wf_index+1] = max(next_wf[wf_index+1], (i+1, j));
                 next_wf[wf_index+2] = max(next_wf[wf_index+2], (i, j));
-
             } else {
                 //v1 and v2 do not match at i, j; add mismatch, insert, and del to the next wavefront
                 next_wf[wf_index] = max(next_wf[wf_index], (i+1, j)); //v2 has a deletion relative to v1
@@ -247,11 +247,6 @@ pub fn wfa_minimize(v1: &[u8], v2: &[u8]) -> MatchScore {
         edits += 1;
         swap(&mut curr_wf, &mut next_wf);
         next_wf = vec![(0, 0); 3+2*edits];
-    }
-
-    MatchScore {
-        score: edits-1,
-        match_length: max_v2
     }
 }
 
