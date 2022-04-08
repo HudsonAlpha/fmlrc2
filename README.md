@@ -71,8 +71,7 @@ Currently, only uncompressed FASTA is supported for output reads.
 2. Unlimited `k`/`K` parameters - FMLRC v1 allowed 1 or 2 sizes for `k` only; FMLRC v2 can have the option set as many times as desired at increased CPU time (for example, a 3-pass correction with `k=[21, 59, 79]`) 
 3. Call caching - FMLRC v2 pre-computes all _k_-mers of a given size. This reduces the run-time significantly by cutting reducing calls to the FM-index.
 4. Input handling - thanks to [needletail](https://crates.io/crates/needletail), the uncorrected reads can be in FASTA/FASTQ and may or may not be gzip compressed.
-5. SIMD accelerated alignment - thanks to [triple_accel](https://crates.io/crates/triple_accel), the correction alignment step can be accelerated with SIMD instructions when available
-6. Unit testing - FMLRC v2 has unit testing through the standard Rust testing framework (i.e. `cargo test`)
+5. Unit testing - FMLRC v2 has unit testing through the standard Rust testing framework (i.e. `cargo test`)
 
 ## Benchmarks
 Thus far, all benchmarks have focused on a relatively small _E. coli_ dataset for verifying correctness.
