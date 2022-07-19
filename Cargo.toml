@@ -1,12 +1,12 @@
 [package]
 name = "fmlrc"
-version = "0.1.7"
+version = "0.1.8"
 authors = ["holtjma <jholt@hudsonalpha.org>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
 description = "FM-index Long Read Corrector - Rust implementation"
-homepage = "https://github.com/HudsonAlpha/rust-fmlrc"
-repository = "https://github.com/HudsonAlpha/rust-fmlrc"
+homepage = "https://github.com/HudsonAlpha/fmlrc2"
+repository = "https://github.com/HudsonAlpha/fmlrc2"
 # documentation - auto-linked
 readme = "README.md"
 
