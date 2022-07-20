@@ -1,9 +1,9 @@
 [![Crates.io](https://img.shields.io/crates/d/fmlrc.svg)](https://crates.io/crates/fmlrc)
 [![Crates.io](https://img.shields.io/crates/v/fmlrc.svg)](https://crates.io/crates/fmlrc)
 [![Crates.io](https://img.shields.io/crates/l/fmlrc.svg)](https://crates.io/crates/fmlrc)
-[![Build status](https://github.com/HudsonAlpha/rust-fmlrc/actions/workflows/quickstart-ci.yml/badge.svg)](https://github.com/HudsonAlpha/rust-fmlrc/actions)
+[![Build status](https://github.com/HudsonAlpha/fmlrc2/actions/workflows/quickstart-ci.yml/badge.svg)](https://github.com/HudsonAlpha/fmlrc2/actions)
 
-# rust-fmlrc
+# FMLRC2
 
 This repo contains the source code for FMLRC v2, based on the same methodology used by the original [FMLRC](https://github.com/holtjma/fmlrc).  In benchmarks, the results between FMLRC v1 and v2 are nearly identical, but tests have shown that v2 uses approximately 50% of the run and CPU time compared to v1.
 
@@ -19,8 +19,8 @@ fmlrc2-convert -h
 
 ### From GitHub
 ```bash 
-git clone https://github.com/HudsonAlpha/rust-fmlrc.git
-cd rust-fmlrc
+git clone https://github.com/HudsonAlpha/fmlrc2.git
+cd fmlrc2
 #testing optional, some tests will fail if ropebwt2 is not installed or cannot be found on PATH
 cargo test --release
 cargo build --release
