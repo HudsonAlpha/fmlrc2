@@ -94,6 +94,15 @@ While not explicitly measured, FMLRC v2 does use ~1GB of extra memory due to the
 | Real time | 3m38.067s | 1m24.219s | **1m14.720s** |
 | CPU time | 27m23.652s | 8m49.680s | **8m15.823s** |
 
+## FAQ
+### How do I set multiple, custom k-mer sizes?
+K-mer sizes are set via the `-k`/`-K` parameter.
+Since the parameter allows for multiple values, the CLI may need the end-of-list delimiter ("`--`") specified as well.
+The following is an example of how you would add a third filtering step with `k=79` to the defaults:
+```
+fmlrc2 -k 21 59 79 -- <comp_msbwt.npy> <uncorrected.fq.gz> <corrected_reads.fa>
+```
+
 ## Reference
 FMLRC v2 does not currently have a pre-print or paper. If you use FMLRC v2, please cite the FMLRC v1 paper:
 
