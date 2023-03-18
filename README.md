@@ -104,8 +104,10 @@ fmlrc2 -k 21 59 79 -- <comp_msbwt.npy> <uncorrected.fq.gz> <corrected_reads.fa>
 ```
 
 ## Reference
-FMLRC v2 does not currently have a pre-print or paper. If you use FMLRC v2, please cite the FMLRC v1 paper:
+FMLRC2 reference:
+[Mak, Q. C., Wick, R. R., Holt, J. M., & Wang, J. R. (2023). Polishing de novo nanopore assemblies of bacteria and eukaryotes with FMLRC2. Molecular Biology and Evolution, 40(3), msad048.](https://doi.org/10.1093/molbev/msad048)
 
+Original FMLRC reference:
 [Wang, Jeremy R. and Holt, James and McMillan, Leonard and Jones, Corbin D. FMLRC: Hybrid long read error correction using an FM-index. BMC Bioinformatics, 2018. 19 (1) 50.](https://bmcbioinformatics.biomedcentral.com/articles/10.1186/s12859-018-2051-3)
 
 ## License
