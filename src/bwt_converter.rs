@@ -61,7 +61,7 @@ pub fn convert_to_vec(bwt: impl Read) -> Vec<u8> {
             //debug stuff - symCount[translator[currSym]] += currCount;
             sym_count[translate[curr as usize] as usize] += count;
             while count > 0 {
-                let write_byte: u8 = translate[curr as usize] | ((count as u8 & COUNT_MASK) << LETTER_BITS) as u8;
+                let write_byte: u8 = translate[curr as usize] | ((count as u8 & COUNT_MASK) << LETTER_BITS);
                 ret.push(write_byte);
                 count >>= NUMBER_BITS;
             }
@@ -79,7 +79,7 @@ pub fn convert_to_vec(bwt: impl Read) -> Vec<u8> {
         //debug stuff - symCount[translator[currSym]] += currCount;
         sym_count[translate[curr as usize] as usize] += count;
         while count > 0 {
-            let write_byte: u8 = translate[curr as usize] | ((count as u8 & COUNT_MASK) << LETTER_BITS) as u8;
+            let write_byte: u8 = translate[curr as usize] | ((count as u8 & COUNT_MASK) << LETTER_BITS);
             ret.push(write_byte);
             count >>= NUMBER_BITS;
         }
