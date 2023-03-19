@@ -79,8 +79,8 @@ pub struct CorrectionResults {
 /// * `arc_params` - the shared parameters to use for performing the correction
 pub fn correction_job(arc_bwt: Arc<BitVectorBWT>, long_read: LongReadFA, arc_params: Arc<CorrectionParameters>) -> CorrectionResults {
     //these clearly are not mutable, nor should they be
-    let bwt: &BitVectorBWT = &*arc_bwt;
-    let params: &CorrectionParameters = &*arc_params;
+    let bwt: &BitVectorBWT = &arc_bwt;
+    let params: &CorrectionParameters = &arc_params;
 
     //convert the input
     let mut seq_i: Vec<u8> = string_util::convert_stoi(&long_read.seq);
@@ -314,7 +314,7 @@ pub fn correction_pass(bwt: &BitVectorBWT, seq_i: &[u8], params: &CorrectionPara
         corrected_seq.extend_from_slice(&correction.seq);
         
         //update our current position
-        current_position = correction.end_pos as usize;
+        current_position = correction.end_pos;
     }
     //add in anything through the end and send it back
     corrected_seq.extend_from_slice(&seq_i[current_position..]);
@@ -333,7 +333,7 @@ pub fn correction_pass(bwt: &BitVectorBWT, seq_i: &[u8], params: &CorrectionPara
 #[inline]
 fn pick_best_levenshtein_search(original: &[u8], candidates: Vec<Vec<u8>>, bwt: &BitVectorBWT, kmer_size: usize, max_ed: usize) -> Option<Vec<u8>> {
     let mut ed_scores: Vec<MatchScore> = Vec::<MatchScore>::with_capacity(candidates.len());
-    let mut min_score: usize = max_ed as usize;
+    let mut min_score: usize = max_ed;
     
     //first calculate the best match for each candidate, and mark the minimum best score we find as we go
     for candidate in candidates.iter() {
